@@ -933,12 +933,21 @@
             a.click();
         }
 
-        function handleFileSelect(event) {
-            console.log('File select triggered');
+        function handleFileSelect(event, replaceAll = false) {
+            console.log('File select triggered, replaceAll:', replaceAll);
             const file = event.target.files[0];
             if (!file) {
                 console.log('No file selected');
                 return;
+            }
+
+            // If replacing all data, show confirmation
+            if (replaceAll) {
+                if (!confirm('⚠️ WARNING!\n\nThis will DELETE ALL current fines and replace them with data from the CSV file.\n\nThis action CANNOT be undone!\n\nAre you sure you want to continue?')) {
+                    // Reset the file input
+                    event.target.value = '';
+                    return;
+                }
             }
 
             console.log('File selected:', file.name);
@@ -947,16 +956,19 @@
             const reader = new FileReader();
             reader.onload = async function(e) {
                 console.log('File loaded, starting import');
-                await parseAndImportCSV(e.target.result);
+                await parseAndImportCSV(e.target.result, replaceAll);
             };
             reader.onerror = function(e) {
                 console.error('File read error:', e);
                 showImportAlert('❌ Failed to read file', 'error');
             };
             reader.readAsText(file);
+
+            // Reset file input so same file can be selected again
+            event.target.value = '';
         }
 
-        async function parseAndImportCSV(csvText) {
+        async function parseAndImportCSV(csvText, replaceAll = false) {
             const lines = csvText.split('\n').filter(line => line.trim());
             if (lines.length < 2) {
                 showImportAlert('CSV is empty', 'error');
@@ -968,7 +980,7 @@
                 const result = [];
                 let current = '';
                 let inQuotes = false;
-                
+
                 for (let i = 0; i < line.length; i++) {
                     const char = line[i];
                     if (char === '"') {
@@ -999,9 +1011,9 @@
             const fines = [];
             for (let i = 1; i < rows.length; i++) {
                 const values = rows[i];
-                
+
                 const paidDate = paidIdx !== -1 ? values[paidIdx] : '';
-                
+
                 const fine = {
                     playerName: values[nameIdx],
                     date: formatDateToISO(values[dateIdx]),
@@ -1022,24 +1034,51 @@
                 return;
             }
 
-            // Show progress message
-            showImportAlert(`Importing ${fines.length} fines... Please wait (this may take 30-60 seconds)`, 'success');
-
-            let imported = 0;
             try {
+                // If replaceAll, delete all existing fines first
+                if (replaceAll) {
+                    showLoading('Deleting all existing fines...');
+                    showImportAlert('Deleting all existing fines...', 'info');
+                    const snapshot = await getDocs(collection(db, 'fines'));
+                    let deleted = 0;
+                    for (const d of snapshot.docs) {
+                        await deleteDoc(d.ref);
+                        deleted++;
+                        if (deleted % 50 === 0) {
+                            showImportAlert(`Deleting... ${deleted}/${snapshot.size} fines`, 'info');
+                        }
+                    }
+                    showImportAlert(`Deleted ${snapshot.size} existing fines`, 'success');
+                }
+
+                // Show progress message
+                const action = replaceAll ? 'Replacing with' : 'Importing';
+                showImportAlert(`${action} ${fines.length} fines... Please wait (this may take 30-60 seconds)`, 'success');
+                showLoading(`${action} ${fines.length} fines...`);
+
+                let imported = 0;
                 for (const fine of fines) {
                     await addDoc(collection(db, 'fines'), fine);
                     imported++;
-                    
+
                     // Update progress every 50 fines
                     if (imported % 50 === 0) {
-                        showImportAlert(`Importing... ${imported}/${fines.length} fines`, 'success');
+                        showImportAlert(`${action}... ${imported}/${fines.length} fines`, 'success');
                     }
                 }
-                showImportAlert(`✅ Imported ${fines.length} fines successfully!`, 'success');
+
+                hideLoading();
+                const successMsg = replaceAll
+                    ? `✅ Successfully replaced all data with ${fines.length} fines!`
+                    : `✅ Imported ${fines.length} fines successfully!`;
+                showImportAlert(successMsg, 'success');
+                showToast(successMsg, 'success');
             } catch (error) {
                 console.error('Import error:', error);
-                showImportAlert(`❌ Import failed after ${imported} fines. Error: ${error.message}`, 'error');
+                hideLoading();
+                const errorMsg = `❌ Import failed. Error: ${error.message}`;
+                showImportAlert(errorMsg, 'error');
+                showToast(errorMsg, 'error');
             }
         }
 

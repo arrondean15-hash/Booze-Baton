@@ -3255,12 +3255,25 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             <div class="card">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">Data Management</h3>
                 <button class="btn btn-secondary" onclick="exportData()">📥 Export CSV</button>
-                
-                <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event)" style="display: none;">
+
+                <div style="margin-top: 10px; margin-bottom: 5px;">
+                    <strong style="color: #1D428A;">Import CSV Options:</strong>
+                </div>
+
+                <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event, false)" style="display: none;">
                 <label for="fileInput" class="btn btn-secondary" style="cursor: pointer; display: block; text-align: center;">
-                    📤 Import CSV (Click to Select File)
+                    📤 Import CSV (Add to Existing Data)
                 </label>
-                
+
+                <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
+                <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
+                    🔄 Import CSV (Replace All Data)
+                </label>
+
+                <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
+                    ℹ️ "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
+                </div>
+
                 <button class="btn btn-success" onclick="markAllPaidSettings()">✅ Mark All as Paid</button>
                 <button class="btn btn-danger" onclick="clearAllFines()">🗑️ Clear All Fines</button>
             </div>
