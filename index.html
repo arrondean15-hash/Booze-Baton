@@ -3094,31 +3094,41 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
 
         <!-- Charts Tab -->
         <div id="charts" class="tab-content">
-            <h2 class="section-title">📈 Analytics Dashboard</h2>
+            <h2 class="section-title">Analytics Dashboard</h2>
 
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Distribution by Player</h3>
-                <canvas id="playerFinesChart" style="max-height: 300px;"></canvas>
+                <div class="chart-container">
+                    <canvas id="playerFinesChart"></canvas>
+                </div>
             </div>
 
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">Fines Per Game Analysis</h3>
-                <canvas id="perGameChart" style="max-height: 300px;"></canvas>
+                <div class="chart-container">
+                    <canvas id="perGameChart"></canvas>
+                </div>
             </div>
 
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">Top 10 Fine Types</h3>
-                <canvas id="fineTypesChart" style="max-height: 300px;"></canvas>
+                <div class="chart-container">
+                    <canvas id="fineTypesChart"></canvas>
+                </div>
             </div>
 
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">Payment Status Overview</h3>
-                <canvas id="paymentChart" style="max-height: 300px;"></canvas>
+                <div class="chart-container">
+                    <canvas id="paymentChart"></canvas>
+                </div>
             </div>
 
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Trends Over Time</h3>
-                <canvas id="trendsChart" style="max-height: 300px;"></canvas>
+                <div class="chart-container">
+                    <canvas id="trendsChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -3315,6 +3325,20 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             <button class="btn" onclick="confirmMarkAllPaid()">Confirm</button>
             <button class="btn btn-secondary" onclick="closeMarkAllModal()">Cancel</button>
         </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <!-- Network Status -->
+    <div class="network-status" id="networkStatus">
+        You're offline. Some features may not work.
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

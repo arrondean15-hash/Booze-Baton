@@ -82,6 +82,7 @@
 
         function init() {
             console.log('🚀 Initializing Booze Baton Tracker...');
+            checkNetworkStatus();
             console.log('📋 Fine reasons count:', fineReasons.length);
             populateFineReasons();
             console.log('✅ Fine reasons populated');
@@ -95,6 +96,8 @@
             console.log('✅ Loading players...');
             loadFineReasons();
             console.log('✅ Loading fine reasons...');
+
+            setTimeout(hideLoading, 500);
         }
 
         function populateFineReasons() {
@@ -166,14 +169,17 @@
 
                 try {
                     console.log('💾 Saving to Firebase...');
+                    showLoading('Adding fine...');
                     await addDoc(collection(db, 'fines'), fine);
                     console.log('✅ Saved successfully!');
+                    hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    alert(`✅ Fine added for ${fine.playerName}!`);
+                    showToast(`Fine added for ${fine.playerName}!`, 'success');
                 } catch (error) {
                     console.error('❌ Firebase error:', error);
-                    alert(`❌ Failed to add fine: ${error.message}`);
+                    hideLoading();
+                    showToast(`Failed to add fine: ${error.message}`, 'error');
                 }
             });
 
@@ -189,12 +195,15 @@
                 };
 
                 try {
+                    showLoading('Updating baton...');
                     await addDoc(collection(db, 'baton'), entry);
+                    hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    alert('✅ Baton updated!');
+                    showToast('Baton updated successfully!', 'success');
                 } catch (error) {
-                    alert('❌ Failed to update');
+                    hideLoading();
+                    showToast('Failed to update baton', 'error');
                 }
             });
         }
@@ -338,8 +347,8 @@
                 return;
             }
 
-            allPlayers.push({ 
-                name, 
+            allPlayers.push({
+                name,
                 eafc25: 0,
                 season2425: 0,
                 eafc26: 0,
@@ -347,7 +356,7 @@
             });
             await savePlayers();
             document.getElementById('newPlayerName').value = '';
-            alert(`✅ ${name} added!`);
+            showToast(`${name} added successfully!`, 'success');
         }
 
         async function deletePlayer(name) {
@@ -355,15 +364,17 @@
                 return;
             }
 
+            showLoading('Deleting player...');
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
-            
+
             const playerFines = allFines.filter(f => f.playerName === name);
             for (const fine of playerFines) {
                 await deleteDoc(doc(db, 'fines', fine.id));
             }
-            
-            alert(`✅ ${name} deleted`);
+
+            hideLoading();
+            showToast(`${name} deleted successfully`, 'success');
         }
 
         async function deletePlayerFromSettings() {
@@ -377,16 +388,18 @@
                 return;
             }
 
+            showLoading('Deleting player and fines...');
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
-            
+
             const playerFines = allFines.filter(f => f.playerName === name);
             for (const fine of playerFines) {
                 await deleteDoc(doc(db, 'fines', fine.id));
             }
-            
+
             document.getElementById('deletePlayerSelect').value = '';
-            alert(`✅ ${name} and all their fines have been deleted`);
+            hideLoading();
+            showToast(`${name} and all fines deleted`, 'success');
         }
 
         async function savePlayers() {
@@ -761,9 +774,13 @@
         async function deleteBatonEntry(id) {
             if (confirm('Delete this entry?')) {
                 try {
+                    showLoading('Deleting...');
                     await deleteDoc(doc(db, 'baton', id));
+                    hideLoading();
+                    showToast('Entry deleted', 'success');
                 } catch (error) {
-                    alert('❌ Failed to delete');
+                    hideLoading();
+                    showToast('Failed to delete entry', 'error');
                 }
             }
         }
@@ -843,25 +860,32 @@
             }
 
             try {
+                showLoading(`Marking ${unpaidFines.length} fines as paid...`);
                 for (const fine of unpaidFines) {
                     await updateDoc(doc(db, 'fines', fine.id), {
                         paid: true,
                         paidDate: paidDate
                     });
                 }
-                alert(`✅ Marked ${unpaidFines.length} fines as paid!`);
+                hideLoading();
+                showToast(`Marked ${unpaidFines.length} fines as paid!`, 'success');
                 closeMarkAllModal();
             } catch (error) {
-                alert('❌ Failed to mark all as paid');
+                hideLoading();
+                showToast('Failed to mark all as paid', 'error');
             }
         }
 
         async function deleteFine(id) {
             if (confirm('Delete this fine?')) {
                 try {
+                    showLoading('Deleting...');
                     await deleteDoc(doc(db, 'fines', id));
+                    hideLoading();
+                    showToast('Fine deleted', 'success');
                 } catch (error) {
-                    alert('❌ Failed to delete');
+                    hideLoading();
+                    showToast('Failed to delete fine', 'error');
                 }
             }
         }
@@ -869,15 +893,18 @@
         async function clearAllFines() {
             if (!confirm('⚠️ Clear ALL fines? Cannot be undone!')) return;
             if (!confirm('Are you SURE?')) return;
-            
+
             try {
+                showLoading('Clearing all fines...');
                 const snapshot = await getDocs(collection(db, 'fines'));
                 for (const d of snapshot.docs) {
                     await deleteDoc(d.ref);
                 }
-                alert('✅ All cleared');
+                hideLoading();
+                showToast('All fines cleared successfully', 'success');
             } catch (error) {
-                alert('❌ Failed');
+                hideLoading();
+                showToast('Failed to clear fines', 'error');
             }
         }
 
@@ -1095,6 +1122,69 @@
             }
         }
 
+        // Toast Notification System
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icons = {
+                success: '✓',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-message">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Loading Overlay
+        function showLoading(text = 'Loading...') {
+            const overlay = document.getElementById('loadingOverlay');
+            const loadingText = overlay.querySelector('.loading-text');
+            loadingText.textContent = text;
+            overlay.classList.add('active');
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('active');
+        }
+
+        // Network Status Detection
+        function checkNetworkStatus() {
+            const status = document.getElementById('networkStatus');
+            if (!navigator.onLine) {
+                status.classList.add('offline');
+            } else {
+                status.classList.remove('offline');
+            }
+        }
+
+        window.addEventListener('online', () => {
+            const status = document.getElementById('networkStatus');
+            status.classList.remove('offline');
+            showToast('Back online!', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            const status = document.getElementById('networkStatus');
+            status.classList.add('offline');
+            showToast('Connection lost', 'error');
+        });
+
         // Chart instances
         let charts = {
             playerFines: null,
@@ -1142,7 +1232,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         title: {
@@ -1158,7 +1248,13 @@
                             ticks: {
                                 callback: function(value) {
                                     return '£' + value;
-                                }
+                                },
+                                font: { size: 11 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 11 }
                             }
                         }
                     }
@@ -1207,7 +1303,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         title: {
@@ -1261,7 +1357,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -1302,7 +1398,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -1362,7 +1458,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
                         title: {
