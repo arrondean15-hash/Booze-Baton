@@ -695,17 +695,20 @@
             }
 
             const forfeitTable = document.getElementById('forfeitTable');
-            
+
             const playerStats = {};
+            // First, initialize all players
+            allPlayers.forEach(player => {
+                playerStats[player.name] = {
+                    total: 0,
+                    games: calculateTotalGames(player)
+                };
+            });
+            // Then add fine totals
             allFines.forEach(fine => {
-                if (!playerStats[fine.playerName]) {
-                    const player = allPlayers.find(p => p.name === fine.playerName);
-                    playerStats[fine.playerName] = {
-                        total: 0,
-                        games: player ? calculateTotalGames(player) : 0
-                    };
+                if (playerStats[fine.playerName]) {
+                    playerStats[fine.playerName].total += fine.amount;
                 }
-                playerStats[fine.playerName].total += fine.amount;
             });
 
             const leastGames = Object.entries(playerStats)
