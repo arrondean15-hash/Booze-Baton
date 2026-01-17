@@ -82,6 +82,7 @@
 
         function init() {
             console.log('🚀 Initializing Booze Baton Tracker...');
+            checkNetworkStatus();
             console.log('📋 Fine reasons count:', fineReasons.length);
             populateFineReasons();
             console.log('✅ Fine reasons populated');
@@ -95,6 +96,8 @@
             console.log('✅ Loading players...');
             loadFineReasons();
             console.log('✅ Loading fine reasons...');
+
+            setTimeout(hideLoading, 500);
         }
 
         function populateFineReasons() {
@@ -166,14 +169,17 @@
 
                 try {
                     console.log('💾 Saving to Firebase...');
+                    showLoading('Adding fine...');
                     await addDoc(collection(db, 'fines'), fine);
                     console.log('✅ Saved successfully!');
+                    hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    alert(`✅ Fine added for ${fine.playerName}!`);
+                    showToast(`Fine added for ${fine.playerName}!`, 'success');
                 } catch (error) {
                     console.error('❌ Firebase error:', error);
-                    alert(`❌ Failed to add fine: ${error.message}`);
+                    hideLoading();
+                    showToast(`Failed to add fine: ${error.message}`, 'error');
                 }
             });
 
@@ -189,12 +195,15 @@
                 };
 
                 try {
+                    showLoading('Updating baton...');
                     await addDoc(collection(db, 'baton'), entry);
+                    hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    alert('✅ Baton updated!');
+                    showToast('Baton updated successfully!', 'success');
                 } catch (error) {
-                    alert('❌ Failed to update');
+                    hideLoading();
+                    showToast('Failed to update baton', 'error');
                 }
             });
         }
@@ -338,8 +347,8 @@
                 return;
             }
 
-            allPlayers.push({ 
-                name, 
+            allPlayers.push({
+                name,
                 eafc25: 0,
                 season2425: 0,
                 eafc26: 0,
@@ -347,7 +356,7 @@
             });
             await savePlayers();
             document.getElementById('newPlayerName').value = '';
-            alert(`✅ ${name} added!`);
+            showToast(`${name} added successfully!`, 'success');
         }
 
         async function deletePlayer(name) {
@@ -355,15 +364,17 @@
                 return;
             }
 
+            showLoading('Deleting player...');
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
-            
+
             const playerFines = allFines.filter(f => f.playerName === name);
             for (const fine of playerFines) {
                 await deleteDoc(doc(db, 'fines', fine.id));
             }
-            
-            alert(`✅ ${name} deleted`);
+
+            hideLoading();
+            showToast(`${name} deleted successfully`, 'success');
         }
 
         async function deletePlayerFromSettings() {
@@ -377,16 +388,18 @@
                 return;
             }
 
+            showLoading('Deleting player and fines...');
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
-            
+
             const playerFines = allFines.filter(f => f.playerName === name);
             for (const fine of playerFines) {
                 await deleteDoc(doc(db, 'fines', fine.id));
             }
-            
+
             document.getElementById('deletePlayerSelect').value = '';
-            alert(`✅ ${name} and all their fines have been deleted`);
+            hideLoading();
+            showToast(`${name} and all fines deleted`, 'success');
         }
 
         async function savePlayers() {
@@ -414,6 +427,7 @@
             updatePlayerStats();
             updateBatonTracker();
             updateFineReasonsTable();
+            updateCharts();
             document.getElementById('totalRecords').textContent = allFines.length;
         }
 
@@ -477,43 +491,43 @@
                     <h3 style="margin-bottom: 15px; color: #1D428A;">${selectedPlayer}</h3>
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-label">🎮 Games</div>
+                            <div class="stat-label">🎮 Games Played</div>
                             <div class="stat-value">${totalGames}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💰 Total</div>
+                            <div class="stat-label">💰 Total Fines</div>
                             <div class="stat-value">£${totalFines.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">📊 Per Game</div>
+                            <div class="stat-label">📊 Fines Per Game</div>
                             <div class="stat-value">£${finesPerGame.toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">📝 Count</div>
+                            <div class="stat-label">📝 Fine Count</div>
                             <div class="stat-value">${playerFines.length}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💵 Average</div>
+                            <div class="stat-label">💵 Average Fine</div>
                             <div class="stat-value">£${avgFine.toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💥 Worst</div>
+                            <div class="stat-label">💥 Worst Single Fine</div>
                             <div class="stat-value">£${worstFine.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">🔥 Most/Day</div>
+                            <div class="stat-label">🔥 Most Fines in One Day</div>
                             <div class="stat-value">${mostInDay}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">⚠️ Unpaid</div>
+                            <div class="stat-label">⚠️ Unpaid Balance</div>
                             <div class="stat-value">£${unpaidFines.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">✓ Paid %</div>
+                            <div class="stat-label">✓ Payment Rate</div>
                             <div class="stat-value">${paymentRate}%</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">🎯 Top Fine</div>
+                            <div class="stat-label">🎯 Most Common Fine</div>
                             <div class="stat-value" style="font-size: 0.8em;">${mostCommon ? mostCommon[0].substring(0, 15) : '-'}</div>
                         </div>
                     </div>
@@ -695,17 +709,20 @@
             }
 
             const forfeitTable = document.getElementById('forfeitTable');
-            
+
             const playerStats = {};
+            // First, initialize all players
+            allPlayers.forEach(player => {
+                playerStats[player.name] = {
+                    total: 0,
+                    games: calculateTotalGames(player)
+                };
+            });
+            // Then add fine totals
             allFines.forEach(fine => {
-                if (!playerStats[fine.playerName]) {
-                    const player = allPlayers.find(p => p.name === fine.playerName);
-                    playerStats[fine.playerName] = {
-                        total: 0,
-                        games: player ? calculateTotalGames(player) : 0
-                    };
+                if (playerStats[fine.playerName]) {
+                    playerStats[fine.playerName].total += fine.amount;
                 }
-                playerStats[fine.playerName].total += fine.amount;
             });
 
             const leastGames = Object.entries(playerStats)
@@ -757,9 +774,13 @@
         async function deleteBatonEntry(id) {
             if (confirm('Delete this entry?')) {
                 try {
+                    showLoading('Deleting...');
                     await deleteDoc(doc(db, 'baton', id));
+                    hideLoading();
+                    showToast('Entry deleted', 'success');
                 } catch (error) {
-                    alert('❌ Failed to delete');
+                    hideLoading();
+                    showToast('Failed to delete entry', 'error');
                 }
             }
         }
@@ -839,25 +860,32 @@
             }
 
             try {
+                showLoading(`Marking ${unpaidFines.length} fines as paid...`);
                 for (const fine of unpaidFines) {
                     await updateDoc(doc(db, 'fines', fine.id), {
                         paid: true,
                         paidDate: paidDate
                     });
                 }
-                alert(`✅ Marked ${unpaidFines.length} fines as paid!`);
+                hideLoading();
+                showToast(`Marked ${unpaidFines.length} fines as paid!`, 'success');
                 closeMarkAllModal();
             } catch (error) {
-                alert('❌ Failed to mark all as paid');
+                hideLoading();
+                showToast('Failed to mark all as paid', 'error');
             }
         }
 
         async function deleteFine(id) {
             if (confirm('Delete this fine?')) {
                 try {
+                    showLoading('Deleting...');
                     await deleteDoc(doc(db, 'fines', id));
+                    hideLoading();
+                    showToast('Fine deleted', 'success');
                 } catch (error) {
-                    alert('❌ Failed to delete');
+                    hideLoading();
+                    showToast('Failed to delete fine', 'error');
                 }
             }
         }
@@ -865,15 +893,18 @@
         async function clearAllFines() {
             if (!confirm('⚠️ Clear ALL fines? Cannot be undone!')) return;
             if (!confirm('Are you SURE?')) return;
-            
+
             try {
+                showLoading('Clearing all fines...');
                 const snapshot = await getDocs(collection(db, 'fines'));
                 for (const d of snapshot.docs) {
                     await deleteDoc(d.ref);
                 }
-                alert('✅ All cleared');
+                hideLoading();
+                showToast('All fines cleared successfully', 'success');
             } catch (error) {
-                alert('❌ Failed');
+                hideLoading();
+                showToast('Failed to clear fines', 'error');
             }
         }
 
@@ -902,12 +933,21 @@
             a.click();
         }
 
-        function handleFileSelect(event) {
-            console.log('File select triggered');
+        function handleFileSelect(event, replaceAll = false) {
+            console.log('File select triggered, replaceAll:', replaceAll);
             const file = event.target.files[0];
             if (!file) {
                 console.log('No file selected');
                 return;
+            }
+
+            // If replacing all data, show confirmation
+            if (replaceAll) {
+                if (!confirm('⚠️ WARNING!\n\nThis will DELETE ALL current fines and replace them with data from the CSV file.\n\nThis action CANNOT be undone!\n\nAre you sure you want to continue?')) {
+                    // Reset the file input
+                    event.target.value = '';
+                    return;
+                }
             }
 
             console.log('File selected:', file.name);
@@ -916,16 +956,19 @@
             const reader = new FileReader();
             reader.onload = async function(e) {
                 console.log('File loaded, starting import');
-                await parseAndImportCSV(e.target.result);
+                await parseAndImportCSV(e.target.result, replaceAll);
             };
             reader.onerror = function(e) {
                 console.error('File read error:', e);
                 showImportAlert('❌ Failed to read file', 'error');
             };
             reader.readAsText(file);
+
+            // Reset file input so same file can be selected again
+            event.target.value = '';
         }
 
-        async function parseAndImportCSV(csvText) {
+        async function parseAndImportCSV(csvText, replaceAll = false) {
             const lines = csvText.split('\n').filter(line => line.trim());
             if (lines.length < 2) {
                 showImportAlert('CSV is empty', 'error');
@@ -937,7 +980,7 @@
                 const result = [];
                 let current = '';
                 let inQuotes = false;
-                
+
                 for (let i = 0; i < line.length; i++) {
                     const char = line[i];
                     if (char === '"') {
@@ -968,9 +1011,9 @@
             const fines = [];
             for (let i = 1; i < rows.length; i++) {
                 const values = rows[i];
-                
+
                 const paidDate = paidIdx !== -1 ? values[paidIdx] : '';
-                
+
                 const fine = {
                     playerName: values[nameIdx],
                     date: formatDateToISO(values[dateIdx]),
@@ -991,24 +1034,51 @@
                 return;
             }
 
-            // Show progress message
-            showImportAlert(`Importing ${fines.length} fines... Please wait (this may take 30-60 seconds)`, 'success');
-
-            let imported = 0;
             try {
+                // If replaceAll, delete all existing fines first
+                if (replaceAll) {
+                    showLoading('Deleting all existing fines...');
+                    showImportAlert('Deleting all existing fines...', 'info');
+                    const snapshot = await getDocs(collection(db, 'fines'));
+                    let deleted = 0;
+                    for (const d of snapshot.docs) {
+                        await deleteDoc(d.ref);
+                        deleted++;
+                        if (deleted % 50 === 0) {
+                            showImportAlert(`Deleting... ${deleted}/${snapshot.size} fines`, 'info');
+                        }
+                    }
+                    showImportAlert(`Deleted ${snapshot.size} existing fines`, 'success');
+                }
+
+                // Show progress message
+                const action = replaceAll ? 'Replacing with' : 'Importing';
+                showImportAlert(`${action} ${fines.length} fines... Please wait (this may take 30-60 seconds)`, 'success');
+                showLoading(`${action} ${fines.length} fines...`);
+
+                let imported = 0;
                 for (const fine of fines) {
                     await addDoc(collection(db, 'fines'), fine);
                     imported++;
-                    
+
                     // Update progress every 50 fines
                     if (imported % 50 === 0) {
-                        showImportAlert(`Importing... ${imported}/${fines.length} fines`, 'success');
+                        showImportAlert(`${action}... ${imported}/${fines.length} fines`, 'success');
                     }
                 }
-                showImportAlert(`✅ Imported ${fines.length} fines successfully!`, 'success');
+
+                hideLoading();
+                const successMsg = replaceAll
+                    ? `✅ Successfully replaced all data with ${fines.length} fines!`
+                    : `✅ Imported ${fines.length} fines successfully!`;
+                showImportAlert(successMsg, 'success');
+                showToast(successMsg, 'success');
             } catch (error) {
                 console.error('Import error:', error);
-                showImportAlert(`❌ Import failed after ${imported} fines. Error: ${error.message}`, 'error');
+                hideLoading();
+                const errorMsg = `❌ Import failed. Error: ${error.message}`;
+                showImportAlert(errorMsg, 'error');
+                showToast(errorMsg, 'error');
             }
         }
 
@@ -1089,6 +1159,366 @@
             } catch (error) {
                 console.error('Error:', error);
             }
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icons = {
+                success: '✓',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-message">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Loading Overlay
+        function showLoading(text = 'Loading...') {
+            const overlay = document.getElementById('loadingOverlay');
+            const loadingText = overlay.querySelector('.loading-text');
+            loadingText.textContent = text;
+            overlay.classList.add('active');
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('active');
+        }
+
+        // Network Status Detection
+        function checkNetworkStatus() {
+            const status = document.getElementById('networkStatus');
+            if (!navigator.onLine) {
+                status.classList.add('offline');
+            } else {
+                status.classList.remove('offline');
+            }
+        }
+
+        window.addEventListener('online', () => {
+            const status = document.getElementById('networkStatus');
+            status.classList.remove('offline');
+            showToast('Back online!', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            const status = document.getElementById('networkStatus');
+            status.classList.add('offline');
+            showToast('Connection lost', 'error');
+        });
+
+        // Chart instances
+        let charts = {
+            playerFines: null,
+            perGame: null,
+            fineTypes: null,
+            payment: null,
+            trends: null
+        };
+
+        function updateCharts() {
+            if (allFines.length === 0) return;
+
+            updatePlayerFinesChart();
+            updatePerGameChart();
+            updateFineTypesChart();
+            updatePaymentChart();
+            updateTrendsChart();
+        }
+
+        function updatePlayerFinesChart() {
+            const ctx = document.getElementById('playerFinesChart');
+            if (!ctx) return;
+
+            const playerTotals = {};
+            allFines.forEach(fine => {
+                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+            });
+
+            const sortedPlayers = Object.entries(playerTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            if (charts.playerFines) charts.playerFines.destroy();
+            charts.playerFines = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedPlayers.map(([name]) => name),
+                    datasets: [{
+                        label: 'Total Fines (£)',
+                        data: sortedPlayers.map(([, total]) => total),
+                        backgroundColor: '#1D428A',
+                        borderColor: '#FFCD00',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Top 10 Players by Total Fines',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value;
+                                },
+                                font: { size: 11 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 11 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePerGameChart() {
+            const ctx = document.getElementById('perGameChart');
+            if (!ctx) return;
+
+            const playerStats = {};
+            allPlayers.forEach(player => {
+                playerStats[player.name] = {
+                    total: 0,
+                    games: calculateTotalGames(player)
+                };
+            });
+            allFines.forEach(fine => {
+                if (playerStats[fine.playerName]) {
+                    playerStats[fine.playerName].total += fine.amount;
+                }
+            });
+
+            const perGameData = Object.entries(playerStats)
+                .filter(([, stats]) => stats.games > 0)
+                .map(([name, stats]) => ({
+                    name,
+                    perGame: stats.total / stats.games
+                }))
+                .sort((a, b) => b.perGame - a.perGame)
+                .slice(0, 10);
+
+            if (charts.perGame) charts.perGame.destroy();
+            charts.perGame = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: perGameData.map(p => p.name),
+                    datasets: [{
+                        label: 'Fines Per Game (£)',
+                        data: perGameData.map(p => p.perGame),
+                        backgroundColor: '#FFCD00',
+                        borderColor: '#1D428A',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Top 10 Players by Fines Per Game',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateFineTypesChart() {
+            const ctx = document.getElementById('fineTypesChart');
+            if (!ctx) return;
+
+            const fineTypeCounts = {};
+            allFines.forEach(fine => {
+                fineTypeCounts[fine.reason] = (fineTypeCounts[fine.reason] || 0) + 1;
+            });
+
+            const topFines = Object.entries(fineTypeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            if (charts.fineTypes) charts.fineTypes.destroy();
+            charts.fineTypes = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: topFines.map(([reason]) => reason.substring(0, 30)),
+                    datasets: [{
+                        data: topFines.map(([, count]) => count),
+                        backgroundColor: [
+                            '#1D428A', '#FFCD00', '#C8102E', '#00A3E0', '#6ECEB2',
+                            '#FF6B6B', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Most Common Fine Types',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePaymentChart() {
+            const ctx = document.getElementById('paymentChart');
+            if (!ctx) return;
+
+            const paid = allFines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+
+            if (charts.payment) charts.payment.destroy();
+            charts.payment = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Paid', 'Unpaid'],
+                    datasets: [{
+                        data: [paid, unpaid],
+                        backgroundColor: ['#6ECEB2', '#C8102E'],
+                        borderWidth: 3,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `Total: £${(paid + unpaid).toFixed(0)} | Paid: £${paid.toFixed(0)} | Unpaid: £${unpaid.toFixed(0)}`,
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTrendsChart() {
+            const ctx = document.getElementById('trendsChart');
+            if (!ctx) return;
+
+            const finesByMonth = {};
+            allFines.forEach(fine => {
+                const date = new Date(fine.date);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                finesByMonth[monthKey] = (finesByMonth[monthKey] || 0) + fine.amount;
+            });
+
+            const sortedMonths = Object.entries(finesByMonth)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .slice(-12);
+
+            if (charts.trends) charts.trends.destroy();
+            charts.trends = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.map(([month]) => {
+                        const [year, m] = month.split('-');
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        return `${monthNames[parseInt(m) - 1]} ${year}`;
+                    }),
+                    datasets: [{
+                        label: 'Monthly Fines (£)',
+                        data: sortedMonths.map(([, total]) => total),
+                        backgroundColor: 'rgba(29, 66, 138, 0.2)',
+                        borderColor: '#1D428A',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#FFCD00',
+                        pointBorderColor: '#1D428A',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Fine Trends Over Last 12 Months',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         init();

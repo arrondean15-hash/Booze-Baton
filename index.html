@@ -3016,6 +3016,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
     <div class="tabs">
         <button class="tab active" onclick="switchTab('add')">➕ Add</button>
         <button class="tab" onclick="switchTab('stats')">📊 Stats</button>
+        <button class="tab" onclick="switchTab('charts')">📈 Charts</button>
         <button class="tab" onclick="switchTab('history')">📋 History</button>
         <button class="tab" onclick="switchTab('players')">👥 Players</button>
         <button class="tab" onclick="switchTab('manage')">⚙️ Manage</button>
@@ -3089,6 +3090,46 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             </div>
 
             <div id="playerStatsDetail"></div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div id="charts" class="tab-content">
+            <h2 class="section-title">Analytics Dashboard</h2>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Distribution by Player</h3>
+                <div class="chart-container">
+                    <canvas id="playerFinesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fines Per Game Analysis</h3>
+                <div class="chart-container">
+                    <canvas id="perGameChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Top 10 Fine Types</h3>
+                <div class="chart-container">
+                    <canvas id="fineTypesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Payment Status Overview</h3>
+                <div class="chart-container">
+                    <canvas id="paymentChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Trends Over Time</h3>
+                <div class="chart-container">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- History Tab -->
@@ -3214,12 +3255,25 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             <div class="card">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">Data Management</h3>
                 <button class="btn btn-secondary" onclick="exportData()">📥 Export CSV</button>
-                
-                <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event)" style="display: none;">
+
+                <div style="margin-top: 10px; margin-bottom: 5px;">
+                    <strong style="color: #1D428A;">Import CSV Options:</strong>
+                </div>
+
+                <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event, false)" style="display: none;">
                 <label for="fileInput" class="btn btn-secondary" style="cursor: pointer; display: block; text-align: center;">
-                    📤 Import CSV (Click to Select File)
+                    📤 Import CSV (Add to Existing Data)
                 </label>
-                
+
+                <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
+                <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
+                    🔄 Import CSV (Replace All Data)
+                </label>
+
+                <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
+                    ℹ️ "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
+                </div>
+
                 <button class="btn btn-success" onclick="markAllPaidSettings()">✅ Mark All as Paid</button>
                 <button class="btn btn-danger" onclick="clearAllFines()">🗑️ Clear All Fines</button>
             </div>
@@ -3286,6 +3340,21 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <!-- Network Status -->
+    <div class="network-status" id="networkStatus">
+        You're offline. Some features may not work.
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
