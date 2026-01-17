@@ -3016,6 +3016,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
     <div class="tabs">
         <button class="tab active" onclick="switchTab('add')">➕ Add</button>
         <button class="tab" onclick="switchTab('stats')">📊 Stats</button>
+        <button class="tab" onclick="switchTab('charts')">📈 Charts</button>
         <button class="tab" onclick="switchTab('history')">📋 History</button>
         <button class="tab" onclick="switchTab('players')">👥 Players</button>
         <button class="tab" onclick="switchTab('manage')">⚙️ Manage</button>
@@ -3089,6 +3090,36 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             </div>
 
             <div id="playerStatsDetail"></div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div id="charts" class="tab-content">
+            <h2 class="section-title">📈 Analytics Dashboard</h2>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Distribution by Player</h3>
+                <canvas id="playerFinesChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fines Per Game Analysis</h3>
+                <canvas id="perGameChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Top 10 Fine Types</h3>
+                <canvas id="fineTypesChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Payment Status Overview</h3>
+                <canvas id="paymentChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Trends Over Time</h3>
+                <canvas id="trendsChart" style="max-height: 300px;"></canvas>
+            </div>
         </div>
 
         <!-- History Tab -->
@@ -3286,6 +3317,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>

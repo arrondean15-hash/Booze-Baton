@@ -414,6 +414,7 @@
             updatePlayerStats();
             updateBatonTracker();
             updateFineReasonsTable();
+            updateCharts();
             document.getElementById('totalRecords').textContent = allFines.length;
         }
 
@@ -477,43 +478,43 @@
                     <h3 style="margin-bottom: 15px; color: #1D428A;">${selectedPlayer}</h3>
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-label">🎮 Games</div>
+                            <div class="stat-label">🎮 Games Played</div>
                             <div class="stat-value">${totalGames}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💰 Total</div>
+                            <div class="stat-label">💰 Total Fines</div>
                             <div class="stat-value">£${totalFines.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">📊 Per Game</div>
+                            <div class="stat-label">📊 Fines Per Game</div>
                             <div class="stat-value">£${finesPerGame.toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">📝 Count</div>
+                            <div class="stat-label">📝 Fine Count</div>
                             <div class="stat-value">${playerFines.length}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💵 Average</div>
+                            <div class="stat-label">💵 Average Fine</div>
                             <div class="stat-value">£${avgFine.toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">💥 Worst</div>
+                            <div class="stat-label">💥 Worst Single Fine</div>
                             <div class="stat-value">£${worstFine.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">🔥 Most/Day</div>
+                            <div class="stat-label">🔥 Most Fines in One Day</div>
                             <div class="stat-value">${mostInDay}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">⚠️ Unpaid</div>
+                            <div class="stat-label">⚠️ Unpaid Balance</div>
                             <div class="stat-value">£${unpaidFines.toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">✓ Paid %</div>
+                            <div class="stat-label">✓ Payment Rate</div>
                             <div class="stat-value">${paymentRate}%</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">🎯 Top Fine</div>
+                            <div class="stat-label">🎯 Most Common Fine</div>
                             <div class="stat-value" style="font-size: 0.8em;">${mostCommon ? mostCommon[0].substring(0, 15) : '-'}</div>
                         </div>
                     </div>
@@ -1092,6 +1093,297 @@
             } catch (error) {
                 console.error('Error:', error);
             }
+        }
+
+        // Chart instances
+        let charts = {
+            playerFines: null,
+            perGame: null,
+            fineTypes: null,
+            payment: null,
+            trends: null
+        };
+
+        function updateCharts() {
+            if (allFines.length === 0) return;
+
+            updatePlayerFinesChart();
+            updatePerGameChart();
+            updateFineTypesChart();
+            updatePaymentChart();
+            updateTrendsChart();
+        }
+
+        function updatePlayerFinesChart() {
+            const ctx = document.getElementById('playerFinesChart');
+            if (!ctx) return;
+
+            const playerTotals = {};
+            allFines.forEach(fine => {
+                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+            });
+
+            const sortedPlayers = Object.entries(playerTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            if (charts.playerFines) charts.playerFines.destroy();
+            charts.playerFines = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedPlayers.map(([name]) => name),
+                    datasets: [{
+                        label: 'Total Fines (£)',
+                        data: sortedPlayers.map(([, total]) => total),
+                        backgroundColor: '#1D428A',
+                        borderColor: '#FFCD00',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Top 10 Players by Total Fines',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePerGameChart() {
+            const ctx = document.getElementById('perGameChart');
+            if (!ctx) return;
+
+            const playerStats = {};
+            allPlayers.forEach(player => {
+                playerStats[player.name] = {
+                    total: 0,
+                    games: calculateTotalGames(player)
+                };
+            });
+            allFines.forEach(fine => {
+                if (playerStats[fine.playerName]) {
+                    playerStats[fine.playerName].total += fine.amount;
+                }
+            });
+
+            const perGameData = Object.entries(playerStats)
+                .filter(([, stats]) => stats.games > 0)
+                .map(([name, stats]) => ({
+                    name,
+                    perGame: stats.total / stats.games
+                }))
+                .sort((a, b) => b.perGame - a.perGame)
+                .slice(0, 10);
+
+            if (charts.perGame) charts.perGame.destroy();
+            charts.perGame = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: perGameData.map(p => p.name),
+                    datasets: [{
+                        label: 'Fines Per Game (£)',
+                        data: perGameData.map(p => p.perGame),
+                        backgroundColor: '#FFCD00',
+                        borderColor: '#1D428A',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Top 10 Players by Fines Per Game',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateFineTypesChart() {
+            const ctx = document.getElementById('fineTypesChart');
+            if (!ctx) return;
+
+            const fineTypeCounts = {};
+            allFines.forEach(fine => {
+                fineTypeCounts[fine.reason] = (fineTypeCounts[fine.reason] || 0) + 1;
+            });
+
+            const topFines = Object.entries(fineTypeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            if (charts.fineTypes) charts.fineTypes.destroy();
+            charts.fineTypes = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: topFines.map(([reason]) => reason.substring(0, 30)),
+                    datasets: [{
+                        data: topFines.map(([, count]) => count),
+                        backgroundColor: [
+                            '#1D428A', '#FFCD00', '#C8102E', '#00A3E0', '#6ECEB2',
+                            '#FF6B6B', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Most Common Fine Types',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePaymentChart() {
+            const ctx = document.getElementById('paymentChart');
+            if (!ctx) return;
+
+            const paid = allFines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+
+            if (charts.payment) charts.payment.destroy();
+            charts.payment = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Paid', 'Unpaid'],
+                    datasets: [{
+                        data: [paid, unpaid],
+                        backgroundColor: ['#6ECEB2', '#C8102E'],
+                        borderWidth: 3,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `Total: £${(paid + unpaid).toFixed(0)} | Paid: £${paid.toFixed(0)} | Unpaid: £${unpaid.toFixed(0)}`,
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTrendsChart() {
+            const ctx = document.getElementById('trendsChart');
+            if (!ctx) return;
+
+            const finesByMonth = {};
+            allFines.forEach(fine => {
+                const date = new Date(fine.date);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                finesByMonth[monthKey] = (finesByMonth[monthKey] || 0) + fine.amount;
+            });
+
+            const sortedMonths = Object.entries(finesByMonth)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .slice(-12);
+
+            if (charts.trends) charts.trends.destroy();
+            charts.trends = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.map(([month]) => {
+                        const [year, m] = month.split('-');
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        return `${monthNames[parseInt(m) - 1]} ${year}`;
+                    }),
+                    datasets: [{
+                        label: 'Monthly Fines (£)',
+                        data: sortedMonths.map(([, total]) => total),
+                        backgroundColor: 'rgba(29, 66, 138, 0.2)',
+                        borderColor: '#1D428A',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#FFCD00',
+                        pointBorderColor: '#1D428A',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Fine Trends Over Last 12 Months',
+                            color: '#1D428A',
+                            font: { size: 14, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         init();
