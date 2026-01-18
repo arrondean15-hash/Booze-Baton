@@ -274,6 +274,8 @@
                 updateSettingsPlayersTable();
                 updateSpakkaTab();
                 updateBatonTracker();
+                updatePlayers();
+                updateCharts();
             } catch (error) {
                 console.error('Error:', error);
             }
