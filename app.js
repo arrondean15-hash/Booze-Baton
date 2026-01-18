@@ -256,6 +256,7 @@
                     batonHistory.push({ id: d.id, ...d.data() });
                 });
                 updateBatonTracker();
+                updateSpakkaTab();
             });
         }
 
@@ -271,14 +272,29 @@
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
                 updateSettingsPlayersTable();
+                updateSpakkaTab();
+                updateBatonTracker();
             } catch (error) {
                 console.error('Error:', error);
             }
         }
 
         async function loadFineReasons() {
-            // Always use the hardcoded list - don't load from Firebase
-            // This ensures we always have the full, up-to-date fine descriptions
+            try {
+                // Try to load from Firebase first
+                const reasonsDoc = await getDocs(collection(db, 'config'));
+                const reasonsData = reasonsDoc.docs.find(d => d.id === 'fineReasons');
+
+                if (reasonsData && reasonsData.data().list) {
+                    // Use saved fine reasons from Firebase
+                    fineReasons = reasonsData.data().list;
+                }
+                // If nothing in Firebase, keep the hardcoded default list
+            } catch (error) {
+                console.error('Error loading fine reasons:', error);
+                // On error, keep the hardcoded default list
+            }
+
             populateFineReasons();
             updateFineReasonsTable();
         }
