@@ -241,6 +241,176 @@
             }
         }
 
+        // MANUAL BATON UPDATE
+        // Checks latest match result and moves baton if holder lost
+        let isUpdatingBaton = false;
+
+        async function manualUpdateBaton() {
+            if (isUpdatingBaton) {
+                showToast('Baton update already in progress', 'info');
+                return;
+            }
+
+            if (!isAdminAuthenticated) {
+                showToast('Please unlock admin panel first', 'error');
+                return;
+            }
+
+            try {
+                isUpdatingBaton = true;
+
+                // Update UI to show loading state
+                const updateBtn = document.getElementById('updateBatonBtn');
+                if (updateBtn) {
+                    updateBtn.disabled = true;
+                    updateBtn.innerHTML = '⏳ Checking latest match...';
+                }
+
+                showLoading('Checking latest match result...');
+
+                // Call Cloud Function
+                const updateBaton = httpsCallable(functions, 'updateBaton');
+                const result = await updateBaton({ adminPin: ADMIN_PIN });
+
+                hideLoading();
+
+                const data = result.data;
+
+                // Display result based on status
+                if (data.status === 'moved') {
+                    // Baton moved - show detailed message
+                    const msg = `
+🍺 BATON MOVED! 🍺
+
+${data.previousHolder} → ${data.newHolder}
+
+Match: ${data.match.home} ${data.match.score} ${data.match.away}
+Competition: ${data.match.competition}
+
+${data.reason}
+                    `.trim();
+
+                    alert(msg);
+                    showToast(`Baton moved to ${data.newHolder}!`, 'success');
+
+                } else if (data.status === 'stayed') {
+                    // Baton stayed
+                    const msg = `
+🍺 BATON STAYED 🍺
+
+Holder: ${data.holder}
+
+Match: ${data.match.home} ${data.match.score} ${data.match.away}
+Competition: ${data.match.competition}
+
+${data.reason}
+                    `.trim();
+
+                    alert(msg);
+                    showToast(`Baton stayed with ${data.holder}`, 'info');
+
+                } else {
+                    // No update
+                    alert(data.message);
+                    showToast(data.message, 'info');
+                }
+
+                // Refresh baton display
+                await loadBatonHolder();
+                updateBatonTracker();
+                updateSpakkaTab();
+
+            } catch (error) {
+                console.error('Error updating baton:', error);
+                hideLoading();
+
+                let errorMsg = 'Failed to update baton';
+                if (error.code === 'permission-denied') {
+                    errorMsg = 'Invalid admin PIN';
+                } else if (error.code === 'not-found') {
+                    errorMsg = 'No baton holder set. Use Team ID Finder first.';
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                alert('❌ Error: ' + errorMsg);
+                showToast(errorMsg, 'error');
+
+            } finally {
+                isUpdatingBaton = false;
+
+                // Reset button
+                const updateBtn = document.getElementById('updateBatonBtn');
+                if (updateBtn) {
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = '🔄 Update Baton';
+                }
+            }
+        }
+
+        // Load and display current baton holder from Firestore
+        let currentBatonHolder = null;
+
+        async function loadBatonHolder() {
+            try {
+                const holderDoc = await getDocs(query(collection(db, 'baton_current')));
+
+                if (holderDoc.empty) {
+                    currentBatonHolder = null;
+                    return;
+                }
+
+                holderDoc.forEach((doc) => {
+                    currentBatonHolder = doc.data();
+                });
+
+                updateBatonHolderDisplay();
+
+            } catch (error) {
+                console.error('Error loading baton holder:', error);
+            }
+        }
+
+        function updateBatonHolderDisplay() {
+            const displayEl = document.getElementById('currentBatonHolderDisplay');
+            if (!displayEl) return;
+
+            if (!currentBatonHolder) {
+                displayEl.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <div style="font-size: 2em; margin-bottom: 10px;">🍺</div>
+                        <p>No baton holder set</p>
+                        <p style="font-size: 0.9em; color: #999;">Use Team ID Finder in Settings to set initial holder</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const lastUpdated = currentBatonHolder.lastUpdatedAt
+                ? new Date(currentBatonHolder.lastUpdatedAt.toDate ? currentBatonHolder.lastUpdatedAt.toDate() : currentBatonHolder.lastUpdatedAt).toLocaleString('en-GB')
+                : 'Unknown';
+
+            displayEl.innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    ${currentBatonHolder.holderLogo ? `<img src="${currentBatonHolder.holderLogo}" alt="${currentBatonHolder.holderTeamName}" style="width: 80px; height: 80px; border-radius: 8px; margin-bottom: 15px;">` : ''}
+                    <div style="font-size: 2em; font-weight: bold; color: #1D428A; margin-bottom: 5px;">
+                        ${currentBatonHolder.holderTeamName}
+                    </div>
+                    <div style="font-size: 1.1em; color: #666; margin-bottom: 10px;">
+                        ${currentBatonHolder.holderCountry}${currentBatonHolder.holderCity ? ` • ${currentBatonHolder.holderCity}` : ''}
+                    </div>
+                    <div style="font-size: 0.85em; color: #999; margin-top: 10px;">
+                        Last updated: ${lastUpdated}
+                    </div>
+                    ${currentBatonHolder.lastProcessedMatchId ? `
+                        <div style="font-size: 0.8em; color: #999; margin-top: 5px;">
+                            Last match ID: ${currentBatonHolder.lastProcessedMatchId}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
         window.deleteFine = deleteFine;
@@ -252,6 +422,12 @@
         window.exportData = exportData;
         window.exportPDF = exportPDF;
         window.exportWhatsApp = exportWhatsApp;
+        window.manualUpdateBaton = manualUpdateBaton;
+        window.loadBatonHolder = loadBatonHolder;
+        window.unlockAdminPanel = unlockAdminPanel;
+        window.searchTeamsAdmin = searchTeamsAdmin;
+        window.saveToKnownTeams = saveToKnownTeams;
+        window.setAsBatonHolder = setAsBatonHolder;
         window.copyUnpaidList = copyUnpaidList;
         window.copyPaymentReminder = copyPaymentReminder;
         window.closePaidModal = closePaidModal;
@@ -313,6 +489,8 @@
             console.log('✅ Loading players...');
             loadFineReasons();
             console.log('✅ Loading fine reasons...');
+            loadBatonHolder();
+            console.log('✅ Loading baton holder...');
 
             setTimeout(hideLoading, 500);
         }

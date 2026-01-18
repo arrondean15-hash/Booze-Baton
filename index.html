@@ -3254,11 +3254,11 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         <!-- Baton Tab -->
         <div id="baton" class="tab-content">
             <h2 class="section-title">🍺 Booze Baton</h2>
-            
-            <div class="baton-current">
-                <div style="font-size: 0.9em; margin-bottom: 5px;">CURRENT LOCATION</div>
-                <div class="baton-team" id="batonCurrentTeam">Leeds United</div>
-                <div class="baton-date" id="batonCurrentDate">-</div>
+
+            <!-- Current Baton Holder -->
+            <div class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0a1e4d 100%); color: white; border: 3px solid #FFCD00;">
+                <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center;">🍺 CURRENT BATON HOLDER 🍺</h3>
+                <div id="currentBatonHolderDisplay"></div>
             </div>
 
             <div class="stats-grid" style="grid-template-columns: 1fr;">
@@ -3289,23 +3289,25 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 </div>
             </div>
 
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Update Baton</h3>
-                <form id="batonForm">
-                    <div class="form-group">
-                        <label>Lost to:</label>
-                        <input type="text" id="batonLostTo" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Score:</label>
-                        <input type="text" id="batonScore" placeholder="e.g. 2-1" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Date:</label>
-                        <input type="date" id="batonDate" required>
-                    </div>
-                    <button type="submit" class="btn">Update Baton</button>
-                </form>
+            <!-- Automated Baton Update -->
+            <div class="card" style="border: 2px solid #00843D;">
+                <h3 style="margin-bottom: 10px; color: #1D428A;">🔄 Automated Baton Update</h3>
+                <div class="info-text" style="margin-bottom: 15px; background: #e8f5e9; border-left-color: #00843D;">
+                    📡 Automatically checks the latest match result for the current holder.<br>
+                    <strong>RULES:</strong>
+                    <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
+                        <li>Baton moves ONLY if holder LOST</li>
+                        <li>Baton stays if holder WON or DREW</li>
+                        <li>Only competitive matches (friendlies ignored)</li>
+                        <li>Prevents duplicate processing</li>
+                    </ul>
+                </div>
+                <button id="updateBatonBtn" class="btn" onclick="manualUpdateBaton()" style="width: 100%; padding: 15px; font-size: 1.1em; background: #00843D;">
+                    🔄 Update Baton
+                </button>
+                <div style="margin-top: 10px; text-align: center; font-size: 0.85em; color: #666;">
+                    ℹ️ Requires admin access (unlock in Settings)
+                </div>
             </div>
 
             <div class="card">

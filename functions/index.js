@@ -202,3 +202,234 @@ exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context)
     );
   }
 });
+
+/**
+ * Cloud Function: updateBaton
+ * Manually checks if baton should move based on latest match result
+ *
+ * RULES:
+ * - Baton moves ONLY when current holder LOSES
+ * - Baton STAYS if holder WINS or DRAWS
+ * - Only competitive matches (friendlies ignored)
+ * - Prevents duplicate processing of same match
+ *
+ * @param {string} adminPin - Admin PIN for authentication
+ * @returns {Object} Result of baton update
+ */
+exports.updateBaton = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+
+  // Initialize admin if not already done
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+
+  const db = admin.firestore();
+
+  try {
+    const { adminPin } = data;
+
+    // Validate admin access
+    validateAdmin(adminPin);
+
+    functions.logger.info('Starting baton update check...');
+
+    // 1. Read current baton holder
+    const batonDoc = await db.collection('baton_current').doc('holder').get();
+
+    if (!batonDoc.exists) {
+      throw new functions.https.HttpsError(
+        'not-found',
+        'No baton holder set. Use Team ID Finder to set initial holder.'
+      );
+    }
+
+    const currentHolder = batonDoc.data();
+    const holderTeamId = currentHolder.holderTeamId;
+    const holderTeamName = currentHolder.holderTeamName;
+    const lastProcessedMatchId = currentHolder.lastProcessedMatchId || null;
+
+    functions.logger.info(`Current holder: ${holderTeamName} (ID: ${holderTeamId})`);
+
+    // 2. Get latest competitive match for current holder
+    const matchResult = await callFootballAPI('fixtures', {
+      team: holderTeamId,
+      last: 100,
+      status: 'FT'
+    });
+
+    if (!matchResult.response || !Array.isArray(matchResult.response) || matchResult.response.length === 0) {
+      functions.logger.warn('No finished matches found for holder');
+      return {
+        status: 'no_update',
+        message: `No finished matches found for ${holderTeamName}`,
+        batonStayed: true,
+        holder: holderTeamName
+      };
+    }
+
+    // Filter out friendlies
+    const competitiveMatches = matchResult.response.filter(match => {
+      const leagueName = match.league.name.toLowerCase();
+      if (leagueName.includes('friendly') || leagueName.includes('friendlies')) {
+        return false;
+      }
+      if (match.league.id === 667) { // Club Friendlies league ID
+        return false;
+      }
+      return true;
+    });
+
+    if (competitiveMatches.length === 0) {
+      functions.logger.warn('No competitive matches found');
+      return {
+        status: 'no_update',
+        message: `No competitive matches found for ${holderTeamName}`,
+        batonStayed: true,
+        holder: holderTeamName
+      };
+    }
+
+    // Sort by date and get most recent
+    competitiveMatches.sort((a, b) => new Date(b.fixture.date) - new Date(a.fixture.date));
+    const latestMatch = competitiveMatches[0];
+
+    functions.logger.info(`Latest match ID: ${latestMatch.fixture.id}`);
+    functions.logger.info(`Last processed match ID: ${lastProcessedMatchId}`);
+
+    // 3. Anti-duplicate check
+    if (lastProcessedMatchId && latestMatch.fixture.id === lastProcessedMatchId) {
+      functions.logger.info('Match already processed');
+      return {
+        status: 'no_update',
+        message: 'This match has already been processed',
+        batonStayed: true,
+        holder: holderTeamName
+      };
+    }
+
+    // 4. Determine outcome from holder's perspective
+    const homeTeam = latestMatch.teams.home;
+    const awayTeam = latestMatch.teams.away;
+    const homeScore = latestMatch.goals.home;
+    const awayScore = latestMatch.goals.away;
+
+    const isHolderHome = homeTeam.id === holderTeamId;
+    const holderScore = isHolderHome ? homeScore : awayScore;
+    const opponentScore = isHolderHome ? awayScore : homeScore;
+    const opponentTeam = isHolderHome ? awayTeam : homeTeam;
+
+    let outcomeForHolder;
+    let batonMoved = false;
+    let reason;
+
+    if (holderScore > opponentScore) {
+      outcomeForHolder = 'WIN';
+      reason = `${holderTeamName} won ${holderScore}-${opponentScore}. Baton stays.`;
+    } else if (holderScore === opponentScore) {
+      outcomeForHolder = 'DRAW';
+      reason = `${holderTeamName} drew ${holderScore}-${opponentScore}. Baton stays.`;
+    } else {
+      outcomeForHolder = 'LOSS';
+      batonMoved = true;
+      reason = `${holderTeamName} lost ${holderScore}-${opponentScore}. Baton moves to ${opponentTeam.name}.`;
+    }
+
+    functions.logger.info(`Outcome: ${outcomeForHolder} - ${reason}`);
+
+    // 5. Prepare history record
+    const historyRecord = {
+      previousHolderTeamId: holderTeamId,
+      previousHolderTeamName: holderTeamName,
+      newHolderTeamId: batonMoved ? opponentTeam.id : holderTeamId,
+      newHolderTeamName: batonMoved ? opponentTeam.name : holderTeamName,
+      matchId: latestMatch.fixture.id,
+      matchDate: latestMatch.fixture.date,
+      competitionName: latestMatch.league.name,
+      competitionCountry: latestMatch.league.country || 'International',
+      homeTeamId: homeTeam.id,
+      homeTeamName: homeTeam.name,
+      homeTeamLogo: homeTeam.logo,
+      awayTeamId: awayTeam.id,
+      awayTeamName: awayTeam.name,
+      awayTeamLogo: awayTeam.logo,
+      homeScore: homeScore,
+      awayScore: awayScore,
+      outcomeForHolder: outcomeForHolder,
+      batonMoved: batonMoved,
+      reason: reason,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: 'manual'
+    };
+
+    // 6. Write to Firestore
+    const batch = db.batch();
+
+    // Update baton_current
+    const newHolderData = {
+      holderTeamId: batonMoved ? opponentTeam.id : holderTeamId,
+      holderTeamName: batonMoved ? opponentTeam.name : holderTeamName,
+      holderCountry: batonMoved ? (latestMatch.league.country || 'International') : currentHolder.holderCountry,
+      holderCity: batonMoved ? null : currentHolder.holderCity,
+      holderLogo: batonMoved ? opponentTeam.logo : currentHolder.holderLogo,
+      lastProcessedMatchId: latestMatch.fixture.id,
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: 'manual'
+    };
+
+    batch.set(db.collection('baton_current').doc('holder'), newHolderData);
+
+    // Add to baton_history
+    batch.add(db.collection('baton_history'), historyRecord);
+
+    await batch.commit();
+
+    functions.logger.info('Baton update successful');
+
+    // 7. Return result
+    if (batonMoved) {
+      return {
+        status: 'moved',
+        message: `Baton moved: ${holderTeamName} → ${opponentTeam.name}`,
+        batonMoved: true,
+        previousHolder: holderTeamName,
+        newHolder: opponentTeam.name,
+        match: {
+          home: homeTeam.name,
+          away: awayTeam.name,
+          score: `${homeScore}-${awayScore}`,
+          competition: latestMatch.league.name,
+          date: latestMatch.fixture.date
+        },
+        reason: reason
+      };
+    } else {
+      return {
+        status: 'stayed',
+        message: `Baton stayed with ${holderTeamName} (${outcomeForHolder.toLowerCase()})`,
+        batonStayed: true,
+        holder: holderTeamName,
+        match: {
+          home: homeTeam.name,
+          away: awayTeam.name,
+          score: `${homeScore}-${awayScore}`,
+          competition: latestMatch.league.name,
+          date: latestMatch.fixture.date
+        },
+        reason: reason
+      };
+    }
+
+  } catch (error) {
+    functions.logger.error('Error in updateBaton:', error);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError(
+      'internal',
+      `Failed to update baton: ${error.message}`
+    );
+  }
+});
