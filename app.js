@@ -59,6 +59,8 @@
         window.exportData = exportData;
         window.exportPDF = exportPDF;
         window.exportWhatsApp = exportWhatsApp;
+        window.copyUnpaidList = copyUnpaidList;
+        window.copyPaymentReminder = copyPaymentReminder;
         window.closePaidModal = closePaidModal;
         window.confirmPaid = confirmPaid;
         window.updatePlayerStats = updatePlayerStats;
@@ -722,7 +724,7 @@
                 const cells = row.cells;
                 const dateDDMMYYYY = cells[0].textContent;
                 const player = cells[1].textContent;
-                const reason = cells[2].textContent;
+                const fullReason = row.getAttribute('data-full-reason') || cells[2].textContent;
                 const status = cells[4].textContent.includes('✓') ? 'paid' : 'unpaid';
 
                 let show = true;
@@ -737,8 +739,8 @@
                     show = false;
                 }
 
-                // Fine filter
-                if (fineFilter && !reason.includes(fineFilter)) {
+                // Fine filter - use full reason from data attribute
+                if (fineFilter && !fullReason.includes(fineFilter)) {
                     show = false;
                 }
 
@@ -797,7 +799,7 @@
                         </thead>
                         <tbody>
                             ${sortedFines.map(fine => `
-                                <tr>
+                                <tr data-full-reason="${fine.reason}">
                                     <td>${formatDateDDMMYYYY(fine.date)}</td>
                                     <td>${fine.playerName}</td>
                                     <td style="font-size: 0.85em;">${fine.reason.substring(0, 30)}${fine.reason.length > 30 ? '...' : ''}</td>
@@ -1314,9 +1316,13 @@
         function updateLeaderboards() {
             // Hall of Shame - Top 5 by total fines
             const playerTotals = {};
-            allFines.forEach(fine => {
-                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
-            });
+            if (allFines && allFines.length > 0) {
+                allFines.forEach(fine => {
+                    if (fine && fine.playerName && fine.amount) {
+                        playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+                    }
+                });
+            }
 
             const hallOfShame = Object.entries(playerTotals)
                 .sort((a, b) => b[1] - a[1])
@@ -1325,12 +1331,12 @@
             const hallOfShameEl = document.getElementById('hallOfShameList');
             if (hallOfShameEl) {
                 if (hallOfShame.length === 0) {
-                    hallOfShameEl.innerHTML = '<div style="color: #999; padding: 10px;">No data yet</div>';
+                    hallOfShameEl.innerHTML = '<div style="color: #999; padding: 10px;">No fines recorded yet</div>';
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     hallOfShameEl.innerHTML = hallOfShame.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
-                            <span>${medals[index]} ${name}</span>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
                             <span style="font-weight: bold; color: #C8102E;">£${total.toFixed(2)}</span>
                         </div>`
                     ).join('');
@@ -1360,8 +1366,8 @@
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     mostImprovedEl.innerHTML = mostImproved.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
-                            <span>${medals[index]} ${name}</span>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
                             <span style="font-weight: bold; color: #00843D;">£${total.toFixed(2)} paid</span>
                         </div>`
                     ).join('');
@@ -1391,8 +1397,8 @@
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     cleanRecordEl.innerHTML = cleanRecord.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
-                            <span>${medals[index]} ${name}</span>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
                             <span style="font-weight: bold; color: #1D428A;">£${total.toFixed(2)} paid</span>
                         </div>`
                     ).join('');
@@ -1437,11 +1443,11 @@
                 } else {
                     safePlayersEl.innerHTML = safePlayers.map((player, index) => {
                         const icons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
+                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="flex: 1; min-width: 150px;">
                                 <span>${icons[index]} ${player.name}</span>
                                 <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
-                                    ${player.totalGames} games played • ${player.fineCount} fines
+                                    ${player.totalGames} games • ${player.fineCount} fines
                                 </div>
                             </div>
                             <div style="text-align: right;">
@@ -1462,11 +1468,11 @@
                 } else {
                     atRiskPlayersEl.innerHTML = atRiskPlayers.map((player, index) => {
                         const icons = ['⚠️', '🔴', '🚨', '💀', '☠️'];
-                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
+                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="flex: 1; min-width: 150px;">
                                 <span>${icons[index]} ${player.name}</span>
                                 <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
-                                    ${player.totalGames} games played • ${player.fineCount} fines
+                                    ${player.totalGames} games • ${player.fineCount} fines
                                 </div>
                             </div>
                             <div style="text-align: right;">
