@@ -270,6 +270,7 @@
                 }
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -489,6 +490,7 @@
                 await setDoc(doc(db, 'config', 'players'), { list: allPlayers });
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -503,6 +505,7 @@
         }
 
         function updateAll() {
+            updatePlayerDropdowns();
             updateStats();
             updateHistory();
             updatePlayers();
