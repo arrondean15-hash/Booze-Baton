@@ -3032,10 +3032,8 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             <div class="card">
                 <form id="fineForm">
                     <div class="form-group">
-                        <label>Player Name *</label>
-                        <select id="playerName" required>
-                            <option value="">Select player...</option>
-                        </select>
+                        <label>Player Name(s) * <span style="font-size: 0.85em; color: #666;">(Select one or more)</span></label>
+                        <div id="playerCheckboxes" style="max-height: 200px; overflow-y: auto; border: 2px solid #e0e0e0; border-radius: 8px; padding: 10px; background: white;"></div>
                     </div>
 
                     <div class="form-group">
@@ -3182,7 +3180,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
             <div class="card">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">Update Games Played</h3>
                 <div class="info-text" style="margin-bottom: 15px;">
-                    Total = (EAFC 25) - (Season 24/25) + (EAFC 26) + (Adjustment)
+                    Update current season games played (EAFC 26 only)
                 </div>
                 <div id="managePlayersTable"></div>
             </div>
@@ -3292,6 +3290,14 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                     </select>
                 </div>
                 <button class="btn btn-danger" onclick="deletePlayerFromSettings()">Delete Player</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 10px; color: #1D428A;">Historic Games Tracking</h3>
+                <div class="info-text" style="margin-bottom: 15px;">
+                    Total = (EAFC 25) - (Season 24/25) + (EAFC 26) + (Adjustment)
+                </div>
+                <div id="settingsPlayersTable"></div>
             </div>
 
             <div class="card">

@@ -160,28 +160,53 @@
             document.getElementById('fineForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 console.log('📝 Form submitted');
-                
-                const fine = {
-                    playerName: document.getElementById('playerName').value,
-                    reason: document.getElementById('fineReason').value,
-                    amount: parseFloat(document.getElementById('fineAmount').value),
-                    date: document.getElementById('fineDate').value,
-                    paid: false,
-                    paidDate: null,
-                    timestamp: new Date().toISOString()
-                };
 
-                console.log('📝 Fine data:', fine);
+                // Get selected players from checkboxes
+                const selectedCheckboxes = document.querySelectorAll('input[name="selectedPlayers"]:checked');
+                const selectedPlayers = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+                if (selectedPlayers.length === 0) {
+                    showToast('Please select at least one player', 'error');
+                    return;
+                }
+
+                const reason = document.getElementById('fineReason').value;
+                const amount = parseFloat(document.getElementById('fineAmount').value);
+                const date = document.getElementById('fineDate').value;
+
+                if (!reason || !amount || !date) {
+                    showToast('Please fill in all fields', 'error');
+                    return;
+                }
 
                 try {
-                    console.log('💾 Saving to Firebase...');
-                    showLoading('Adding fine...');
-                    await addDoc(collection(db, 'fines'), fine);
-                    console.log('✅ Saved successfully!');
+                    console.log('💾 Saving fines for', selectedPlayers.length, 'player(s)...');
+                    showLoading(`Adding fine${selectedPlayers.length > 1 ? 's' : ''}...`);
+
+                    // Add a fine for each selected player
+                    for (const playerName of selectedPlayers) {
+                        const fine = {
+                            playerName: playerName,
+                            reason: reason,
+                            amount: amount,
+                            date: date,
+                            paid: false,
+                            paidDate: null,
+                            timestamp: new Date().toISOString()
+                        };
+                        await addDoc(collection(db, 'fines'), fine);
+                        console.log('✅ Saved fine for', playerName);
+                    }
+
                     hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    showToast(`Fine added for ${fine.playerName}!`, 'success');
+
+                    if (selectedPlayers.length === 1) {
+                        showToast(`Fine added for ${selectedPlayers[0]}!`, 'success');
+                    } else {
+                        showToast(`Fines added for ${selectedPlayers.length} players!`, 'success');
+                    }
                 } catch (error) {
                     console.error('❌ Firebase error:', error);
                     hideLoading();
@@ -258,22 +283,43 @@
         }
 
         function updatePlayerDropdowns() {
+            // Update player checkboxes for multi-select in Add Fine form
+            const playerCheckboxes = document.getElementById('playerCheckboxes');
+            if (playerCheckboxes) {
+                if (allPlayers.length === 0) {
+                    playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px;">No players yet. Add players in the Manage tab.</div>';
+                } else {
+                    playerCheckboxes.innerHTML = allPlayers.map(player => `
+                        <label style="display: flex; align-items: center; padding: 8px; margin-bottom: 5px; cursor: pointer; border-radius: 6px; transition: background 0.2s;"
+                               onmouseover="this.style.background='#f5f5f5'"
+                               onmouseout="this.style.background='white'">
+                            <input type="checkbox" name="selectedPlayers" value="${player.name}"
+                                   style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span style="font-size: 1em; color: #333;">${player.name}</span>
+                        </label>
+                    `).join('');
+                }
+            }
+
+            // Keep backwards compatibility for old select element if it exists
             const addFineSelect = document.getElementById('playerName');
             const statsSelect = document.getElementById('playerSelector');
             const filterSelect = document.getElementById('filterPlayer');
             const deleteSelect = document.getElementById('deletePlayerSelect');
-            
-            addFineSelect.innerHTML = '<option value="">Select player...</option>';
-            statsSelect.innerHTML = '<option value="all">All Players</option>';
-            filterSelect.innerHTML = '<option value="">All Players</option>';
-            deleteSelect.innerHTML = '<option value="">Select player to delete...</option>';
-            
+
+            if (addFineSelect) addFineSelect.innerHTML = '<option value="">Select player...</option>';
+            if (statsSelect) statsSelect.innerHTML = '<option value="all">All Players</option>';
+            if (filterSelect) filterSelect.innerHTML = '<option value="">All Players</option>';
+            if (deleteSelect) deleteSelect.innerHTML = '<option value="">Select player to delete...</option>';
+
             allPlayers.forEach(player => {
                 [addFineSelect, statsSelect, filterSelect, deleteSelect].forEach(select => {
-                    const option = document.createElement('option');
-                    option.value = player.name;
-                    option.textContent = player.name;
-                    select.appendChild(option);
+                    if (select) {
+                        const option = document.createElement('option');
+                        option.value = player.name;
+                        option.textContent = player.name;
+                        select.appendChild(option);
+                    }
                 });
             });
         }
@@ -288,6 +334,39 @@
 
         function updateManagePlayersTable() {
             const table = document.getElementById('managePlayersTable');
+            if (!table) return;
+
+            if (allPlayers.length === 0) {
+                table.innerHTML = '<div class="empty-state"><p>No players yet</p></div>';
+                return;
+            }
+
+            table.innerHTML = allPlayers.map(player => {
+                const total = calculateTotalGames(player);
+                return `
+                    <div class="player-card">
+                        <div class="player-name">${player.name}</div>
+                        <div class="games-tracking">
+                            <div class="games-row">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 0.85em;">EAFC 26</label>
+                                    <input type="number" class="games-input" value="${player.eafc26 || 0}"
+                                           onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
+                                </div>
+                            </div>
+                            <div class="games-total">
+                                Total Games: ${total}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateSettingsPlayersTable() {
+            const table = document.getElementById('settingsPlayersTable');
+            if (!table) return;
+
             if (allPlayers.length === 0) {
                 table.innerHTML = '<div class="empty-state"><p>No players yet</p></div>';
                 return;
@@ -302,26 +381,22 @@
                             <div class="games-row">
                                 <div>
                                     <label style="font-size: 0.85em;">EAFC 25</label>
-                                    <input type="number" class="games-input" value="${player.eafc25 || 0}" 
+                                    <input type="number" class="games-input" value="${player.eafc25 || 0}"
                                            onchange="updateGamesField('${player.name}', 'eafc25', this.value)">
                                 </div>
                                 <div>
                                     <label style="font-size: 0.85em;">Season 24/25</label>
-                                    <input type="number" class="games-input" value="${player.season2425 || 0}" 
+                                    <input type="number" class="games-input" value="${player.season2425 || 0}"
                                            onchange="updateGamesField('${player.name}', 'season2425', this.value)">
                                 </div>
                             </div>
                             <div class="games-row">
                                 <div>
-                                    <label style="font-size: 0.85em;">EAFC 26</label>
-                                    <input type="number" class="games-input" value="${player.eafc26 || 0}" 
-                                           onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
-                                </div>
-                                <div>
                                     <label style="font-size: 0.85em;">Adjustment (+/-)</label>
-                                    <input type="number" class="games-input" value="${player.adjustment || 0}" 
+                                    <input type="number" class="games-input" value="${player.adjustment || 0}"
                                            onchange="updateGamesField('${player.name}', 'adjustment', this.value)">
                                 </div>
+                                <div></div>
                             </div>
                             <div class="games-total">
                                 Total Games: ${total}
@@ -338,6 +413,7 @@
                 player[field] = parseInt(value) || 0;
                 await savePlayers();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             }
         }
 
@@ -432,6 +508,8 @@
             updatePlayers();
             updatePlayerStats();
             updateBatonTracker();
+            updateManagePlayersTable();
+            updateSettingsPlayersTable();
             updateFineReasonsTable();
             updateCharts();
             updateSpakkaTab();
