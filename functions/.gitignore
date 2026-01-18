@@ -1,0 +1,27 @@
+# Compiled JavaScript files
+**/*.js.map
+**/*.d.ts
+
+# Dependency directories
+node_modules/
+
+# Firebase cache
+.firebase/
+
+# Firebase config
+.runtimeconfig.json
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log*
+firebase-debug.*.log*
+
+# OS files
+.DS_Store
+Thumbs.db
