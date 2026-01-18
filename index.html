@@ -3011,6 +3011,9 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 <h1>🍺 BOOZE BATON</h1>
                 <div class="subtitle">Booze Baton Tracker</div>
                 <div style="font-size: 0.75em; color: #FFCD00; margin-top: 5px; font-style: italic;">Spartan can't make apps, Stuey rules supreme</div>
+                <div id="versionInfo" style="font-size: 0.7em; color: #999; margin-top: 8px; opacity: 0.7;">
+                    <span>v2.1.0</span> • <span id="lastUpdated">Last updated: 18 Jan 2026</span>
+                </div>
             </div>
         </div>
     </div>
@@ -3196,7 +3199,15 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
 
                 <button class="btn btn-success" style="margin-top: 10px;" onclick="markAllPaid()">Mark All as Paid</button>
             </div>
-            
+
+            <div class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0f2454 100%); border: none; text-align: center; padding: 20px;">
+                <div style="color: white; margin-bottom: 12px;">
+                    <div style="font-size: 1.1em; font-weight: 600;">📜 Full Fine History</div>
+                    <div style="font-size: 0.85em; opacity: 0.9; margin-top: 5px;">Click refresh to load all fines from database</div>
+                </div>
+                <button id="refreshHistoryBtn" class="btn" style="background: white; color: #1D428A; font-weight: 600;" onclick="refreshHistory()">🔄 Refresh History</button>
+            </div>
+
             <div id="historyContent"></div>
         </div>
 

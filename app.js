@@ -1,5 +1,5 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -42,11 +42,25 @@
             { reason: "25% Late Fine Increase", amount: 2.00 }
         ];
 
-        let allFines = [];
+        let allFines = []; // Recent fines (limited to 200) - for realtime updates
         let allPlayers = [];
         let batonHistory = [];
         let currentPaidFineId = null;
         let currentDateRangeFilter = 'all';
+
+        // FIRESTORE PERFORMANCE OPTIMIZATION
+        // To prevent excessive reads (~89K/day on free tier), we:
+        // 1. Limit realtime listeners to recent data only (200 fines, 50 baton)
+        // 2. Store unsubscribe functions to prevent listener stacking
+        // 3. Use cached full history with manual refresh for History tab
+        // 4. Support ?dev=1 URL param to disable listeners during testing
+        let finesUnsubscribe = null;
+        let batonUnsubscribe = null;
+        let cachedFullFines = []; // Full history for History tab - loaded manually
+        let lastHistoryFetch = null;
+        let didInit = false; // Prevent multiple init() calls
+        let activeListenerCount = 0; // Track active snapshot listeners
+        const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
@@ -66,6 +80,7 @@
         window.updatePlayerStats = updatePlayerStats;
         window.applyFilters = applyFilters;
         window.setDateFilter = setDateFilter;
+        window.refreshHistory = refreshHistory;
         window.addNewFineReason = addNewFineReason;
         window.editFineReason = editFineReason;
         window.deleteFineReason = deleteFineReason;
@@ -93,7 +108,17 @@
         }
 
         function init() {
+            // Prevent multiple initialization
+            if (didInit) {
+                console.warn('⚠️ init() already called, skipping duplicate initialization');
+                return;
+            }
+            didInit = true;
+
             console.log('🚀 Initializing Booze Baton Tracker...');
+            if (isDevMode) {
+                console.warn('🔧 DEV MODE: Realtime listeners disabled. Use ?dev=1 to avoid Firestore read spikes during testing.');
+            }
             checkNetworkStatus();
             console.log('📋 Fine reasons count:', fineReasons.length);
             populateFineReasons();
@@ -246,24 +271,105 @@
         }
 
         function setupRealtimeListeners() {
-            const finesQuery = query(collection(db, 'fines'), orderBy('timestamp', 'desc'));
-            onSnapshot(finesQuery, (snapshot) => {
+            // DEV MODE SAFETY: If ?dev=1 is in URL, use one-time fetch instead of realtime listeners
+            // This prevents Firestore read spikes during development/testing on live URL
+            if (isDevMode) {
+                console.log('🔧 DEV MODE: Using one-time getDocs() instead of realtime listeners');
+                fetchRecentDataOnce();
+                return;
+            }
+
+            // UNSUBSCRIBE OLD LISTENERS FIRST to prevent stacking
+            // This is critical when page is refreshed or init() called multiple times
+            if (finesUnsubscribe) {
+                console.log('📡 Unsubscribing old fines listener');
+                finesUnsubscribe();
+                activeListenerCount--;
+            }
+            if (batonUnsubscribe) {
+                console.log('📡 Unsubscribing old baton listener');
+                batonUnsubscribe();
+                activeListenerCount--;
+            }
+
+            // FINES LISTENER - BOUNDED to most recent 200
+            // This powers: Stats, Recent Activity, Leaderboards, Charts
+            // History tab uses separate cached data with manual refresh
+            const finesQuery = query(
+                collection(db, 'fines'),
+                orderBy('timestamp', 'desc'),
+                limit(200) // CRITICAL: Prevents reading all ~800 fines on every change
+            );
+
+            console.log('📡 Attaching BOUNDED fines listener (limit 200)');
+            finesUnsubscribe = onSnapshot(finesQuery, (snapshot) => {
                 allFines = [];
                 snapshot.forEach((d) => {
                     allFines.push({ id: d.id, ...d.data() });
                 });
-                updateAll();
+                console.log(`📊 Fines snapshot: ${allFines.length} recent fines loaded`);
+                updateAll(); // NOTE: updateAll() does NOT update History anymore
             });
+            activeListenerCount++;
 
-            const batonQuery = query(collection(db, 'baton'), orderBy('timestamp', 'desc'));
-            onSnapshot(batonQuery, (snapshot) => {
+            // BATON LISTENER - BOUNDED to most recent 50
+            const batonQuery = query(
+                collection(db, 'baton'),
+                orderBy('timestamp', 'desc'),
+                limit(50) // CRITICAL: Prevents reading entire baton history
+            );
+
+            console.log('📡 Attaching BOUNDED baton listener (limit 50)');
+            batonUnsubscribe = onSnapshot(batonQuery, (snapshot) => {
                 batonHistory = [];
                 snapshot.forEach((d) => {
                     batonHistory.push({ id: d.id, ...d.data() });
                 });
+                console.log(`🍺 Baton snapshot: ${batonHistory.length} baton entries loaded`);
                 updateBatonTracker();
                 updateSpakkaTab();
             });
+            activeListenerCount++;
+
+            console.log(`✅ Active snapshot listeners: ${activeListenerCount}`);
+        }
+
+        // DEV MODE HELPER: One-time fetch instead of realtime listeners
+        async function fetchRecentDataOnce() {
+            try {
+                // Fetch recent 200 fines
+                const finesQuery = query(
+                    collection(db, 'fines'),
+                    orderBy('timestamp', 'desc'),
+                    limit(200)
+                );
+                const finesSnapshot = await getDocs(finesQuery);
+                allFines = [];
+                finesSnapshot.forEach((d) => {
+                    allFines.push({ id: d.id, ...d.data() });
+                });
+                console.log(`📊 DEV MODE: Loaded ${allFines.length} recent fines (one-time)`);
+
+                // Fetch recent 50 baton entries
+                const batonQuery = query(
+                    collection(db, 'baton'),
+                    orderBy('timestamp', 'desc'),
+                    limit(50)
+                );
+                const batonSnapshot = await getDocs(batonQuery);
+                batonHistory = [];
+                batonSnapshot.forEach((d) => {
+                    batonHistory.push({ id: d.id, ...d.data() });
+                });
+                console.log(`🍺 DEV MODE: Loaded ${batonHistory.length} baton entries (one-time)`);
+
+                // Update UI once
+                updateAll();
+                updateBatonTracker();
+                updateSpakkaTab();
+            } catch (error) {
+                console.error('❌ DEV MODE: Error fetching data:', error);
+            }
         }
 
         async function loadPlayers() {
@@ -531,7 +637,8 @@
         function updateAll() {
             updatePlayerDropdowns();
             updateStats();
-            updateHistory();
+            // NOTE: updateHistory() REMOVED from here to prevent excessive re-renders
+            // History now uses cached data with manual refresh only
             updatePlayers();
             updatePlayerStats();
             updateBatonTracker();
@@ -773,16 +880,77 @@
             });
         }
 
+        // FULL HISTORY LOADER - Manual refresh only
+        // Loads ALL fines from Firestore (expensive operation)
+        // This is separate from realtime listener to control costs
+        async function fetchFullHistory() {
+            try {
+                console.log('📜 Fetching FULL history from Firestore...');
+                const historyQuery = query(
+                    collection(db, 'fines'),
+                    orderBy('timestamp', 'desc')
+                    // NO LIMIT - loads all ~800 fines
+                );
+
+                const snapshot = await getDocs(historyQuery);
+                cachedFullFines = [];
+                snapshot.forEach((d) => {
+                    cachedFullFines.push({ id: d.id, ...d.data() });
+                });
+
+                lastHistoryFetch = new Date();
+                console.log(`✅ Full history loaded: ${cachedFullFines.length} fines (${lastHistoryFetch.toLocaleTimeString()})`);
+
+                // Update the UI
+                updateHistory();
+                applyFilters(); // Re-apply any active filters
+
+                return true;
+            } catch (error) {
+                console.error('❌ Error fetching full history:', error);
+                showToast('Failed to load history', 'error');
+                return false;
+            }
+        }
+
+        // REFRESH HISTORY BUTTON HANDLER
+        async function refreshHistory() {
+            const refreshBtn = document.getElementById('refreshHistoryBtn');
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = '⏳ Refreshing...';
+            }
+
+            const success = await fetchFullHistory();
+
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Refresh History';
+            }
+
+            if (success) {
+                showToast(`History refreshed: ${cachedFullFines.length} fines loaded`, 'success');
+            }
+        }
+
         function updateHistory() {
             const historyContent = document.getElementById('historyContent');
-            
-            if (allFines.length === 0) {
-                historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p>No fines yet</p></div>';
+
+            // Use cachedFullFines (from manual refresh) instead of allFines (realtime limited data)
+            const finesData = cachedFullFines.length > 0 ? cachedFullFines : [];
+
+            if (finesData.length === 0) {
+                historyContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>History not loaded yet</p>
+                        <p style="font-size: 0.9em; color: #666; margin-top: 10px;">Click "Refresh History" button above to load all fines</p>
+                    </div>`;
                 return;
             }
 
             // Sort by date descending (most recent first)
-            const sortedFines = [...allFines].sort((a, b) => new Date(b.date) - new Date(a.date));
+            const sortedFines = [...finesData].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             historyContent.innerHTML = `
                 <div class="table-container">
