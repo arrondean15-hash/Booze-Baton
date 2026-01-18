@@ -793,9 +793,13 @@
         }
 
         function updateSpakkaTab() {
+            // Check if elements exist (tab might not be loaded yet)
+            const potElement = document.getElementById('spakkaTotalPot');
+            if (!potElement) return;
+
             // Update total pot
             const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
-            document.getElementById('spakkaTotalPot').textContent = `£${totalPot.toFixed(0)}`;
+            potElement.textContent = `£${totalPot.toFixed(0)}`;
 
             // Update unpaid list - show who owes money
             const unpaidByPlayer = {};
@@ -804,19 +808,21 @@
             });
 
             const unpaidList = document.getElementById('spakkaUnpaidList');
-            const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
+            if (unpaidList) {
+                const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
 
-            if (sortedUnpaid.length === 0) {
-                unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #27ae60;">🎉 Everyone has paid!</div>';
-            } else {
-                unpaidList.innerHTML = sortedUnpaid.map(([name, amount]) => `
-                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2em; font-weight: 600; color: #333;">${name}</span>
-                            <span style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">£${amount.toFixed(0)}</span>
+                if (sortedUnpaid.length === 0) {
+                    unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #27ae60;">🎉 Everyone has paid!</div>';
+                } else {
+                    unpaidList.innerHTML = sortedUnpaid.map(([name, amount]) => `
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2em; font-weight: 600; color: #333;">${name}</span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">£${amount.toFixed(0)}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Update top offenders - who has most fines
@@ -826,77 +832,96 @@
             });
 
             const topOffenders = document.getElementById('spakkaTopOffenders');
-            const sortedOffenders = Object.entries(totalsByPlayer).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            if (topOffenders) {
+                const sortedOffenders = Object.entries(totalsByPlayer).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-            if (sortedOffenders.length === 0) {
-                topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No fines yet</div>';
-            } else {
-                const medals = ['🥇', '🥈', '🥉'];
-                topOffenders.innerHTML = sortedOffenders.map(([name, amount], index) => `
-                    <div style="background: ${index === 0 ? '#fff3cd' : '#f9f9f9'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#e0e0e0'};">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2em;">
-                                <span style="font-size: 1.5em; margin-right: 8px;">${medals[index]}</span>
-                                <strong>${name}</strong>
-                            </span>
-                            <span style="font-size: 1.5em; font-weight: bold; color: #1D428A;">£${amount.toFixed(0)}</span>
+                if (sortedOffenders.length === 0) {
+                    topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No fines yet</div>';
+                } else {
+                    const medals = ['🥇', '🥈', '🥉'];
+                    topOffenders.innerHTML = sortedOffenders.map(([name, amount], index) => `
+                        <div style="background: ${index === 0 ? '#fff3cd' : '#f9f9f9'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#e0e0e0'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2em;">
+                                    <span style="font-size: 1.5em; margin-right: 8px;">${medals[index]}</span>
+                                    <strong>${name}</strong>
+                                </span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #1D428A;">£${amount.toFixed(0)}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Update baton holder
-            if (batonHistory.length > 0) {
-                const latest = batonHistory[0];
-                document.getElementById('spakkaBatonHolder').textContent = latest.to;
-            } else {
-                document.getElementById('spakkaBatonHolder').textContent = '-';
+            const batonHolderElement = document.getElementById('spakkaBatonHolder');
+            if (batonHolderElement) {
+                if (batonHistory && batonHistory.length > 0) {
+                    const latest = batonHistory[0];
+                    batonHolderElement.textContent = latest.to || '-';
+                } else {
+                    batonHolderElement.textContent = '-';
+                }
             }
 
-            // Update forfeits (who drinks next)
+            // Update forfeits (Current Forfeits Holders)
             const playerStats = {};
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            if (allPlayers && allPlayers.length > 0) {
+                allPlayers.forEach(player => {
+                    playerStats[player.name] = {
+                        total: 0,
+                        games: calculateTotalGames(player)
+                    };
+                });
+                allFines.forEach(fine => {
+                    if (playerStats[fine.playerName]) {
+                        playerStats[fine.playerName].total += fine.amount;
+                    }
+                });
+            }
 
-            const leastGames = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, games: stats.games }))
-                .sort((a, b) => a.games - b.games)[0];
+            const leastGames = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({ name, games: stats.games }))
+                    .sort((a, b) => a.games - b.games)[0]
+                : null;
 
-            const highestTotal = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, total: stats.total }))
-                .sort((a, b) => b.total - a.total)[0];
+            const highestTotal = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({ name, total: stats.total }))
+                    .sort((a, b) => b.total - a.total)[0]
+                : null;
 
-            const highestPerGame = Object.entries(playerStats)
-                .map(([name, stats]) => ({
-                    name,
-                    perGame: stats.games > 0 ? stats.total / stats.games : 0
-                }))
-                .sort((a, b) => b.perGame - a.perGame)[0];
+            const highestPerGame = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.games > 0 ? stats.total / stats.games : 0
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)[0]
+                : null;
 
             const forfeitsDiv = document.getElementById('spakkaForfeits');
-            forfeitsDiv.innerHTML = `
-                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #27ae60;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Least Games</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
-                </div>
-                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Most Fines Total</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
-                </div>
-                <div style="background: #ffe5e5; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Worst Per Game</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
-                </div>
-            `;
+            if (forfeitsDiv) {
+                if (Object.keys(playerStats).length === 0) {
+                    forfeitsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No player data yet</div>';
+                } else {
+                    forfeitsDiv.innerHTML = `
+                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #27ae60;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Least Games</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
+                        </div>
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Most Fines Total</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
+                        </div>
+                        <div style="background: #ffe5e5; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Worst Per Game</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
+                        </div>
+                    `;
+                }
+            }
         }
 
         function togglePaid(id, paid) {
@@ -1198,18 +1223,26 @@
 
         function formatDateToISO(dateStr) {
             if (!dateStr) return null;
-            
-            const date = new Date(dateStr);
-            if (!isNaN(date.getTime())) {
-                return date.toISOString().split('T')[0];
-            }
-            
+
+            // First try to parse DD/MM/YYYY format (UK format)
             const parts = dateStr.split('/');
             if (parts.length === 3) {
                 const [day, month, year] = parts;
-                return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                // Validate it's actually a date
+                const d = parseInt(day);
+                const m = parseInt(month);
+                const y = parseInt(year);
+                if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900) {
+                    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
             }
-            
+
+            // Fallback: try ISO format (YYYY-MM-DD)
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return dateStr;
+            }
+
+            // Last resort: return today's date
             return new Date().toISOString().split('T')[0];
         }
 

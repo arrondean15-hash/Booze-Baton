@@ -287,6 +287,12 @@
             margin-bottom: 15px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             border-left: 4px solid #1D428A;
+            overflow: visible;
+            word-wrap: break-word;
+        }
+
+        .player-card > div {
+            flex-wrap: wrap;
         }
 
         .player-name {
@@ -716,6 +722,21 @@
 
             .player-stat-value {
                 font-size: 1em;
+            }
+
+            /* Baton forfeits mobile fixes */
+            #forfeitTable .player-card > div {
+                font-size: 0.95em;
+            }
+
+            #forfeitTable .player-card > div > span:first-child {
+                flex: 1;
+                min-width: 50%;
+            }
+
+            #forfeitTable .player-card > div > strong {
+                text-align: right;
+                flex-shrink: 0;
             }
         }
 
