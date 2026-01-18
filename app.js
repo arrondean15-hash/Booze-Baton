@@ -46,6 +46,7 @@
         let allPlayers = [];
         let batonHistory = [];
         let currentPaidFineId = null;
+        let currentDateRangeFilter = 'all';
 
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
@@ -56,10 +57,13 @@
         window.addNewPlayer = addNewPlayer;
         window.deletePlayer = deletePlayer;
         window.exportData = exportData;
+        window.exportPDF = exportPDF;
+        window.exportWhatsApp = exportWhatsApp;
         window.closePaidModal = closePaidModal;
         window.confirmPaid = confirmPaid;
         window.updatePlayerStats = updatePlayerStats;
         window.applyFilters = applyFilters;
+        window.setDateFilter = setDateFilter;
         window.addNewFineReason = addNewFineReason;
         window.editFineReason = editFineReason;
         window.deleteFineReason = deleteFineReason;
@@ -553,6 +557,8 @@
             
             const worstOffender = Object.entries(playerTotals).sort((a, b) => b[1] - a[1])[0];
             document.getElementById('worstOffender').textContent = worstOffender ? worstOffender[0] : '-';
+
+            updateLeaderboards();
         }
 
         function updatePlayerStats() {
@@ -655,49 +661,112 @@
             `;
         }
 
+        function setDateFilter(range) {
+            currentDateRangeFilter = range;
+
+            // Calculate date range
+            const now = new Date();
+            let startDate, endDate, displayText;
+
+            switch (range) {
+                case 'thisMonth':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                    displayText = `Showing: This Month (${startDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })})`;
+                    break;
+                case 'lastMonth':
+                    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                    endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+                    displayText = `Showing: Last Month (${startDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })})`;
+                    break;
+                case 'thisSeason':
+                    // Football season runs August to May
+                    const currentMonth = now.getMonth();
+                    const seasonStartYear = currentMonth >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+                    startDate = new Date(seasonStartYear, 7, 1); // August 1st
+                    endDate = new Date(seasonStartYear + 1, 4, 31); // May 31st
+                    displayText = `Showing: This Season (${seasonStartYear}/${(seasonStartYear + 1).toString().slice(2)})`;
+                    break;
+                case 'all':
+                default:
+                    startDate = null;
+                    endDate = null;
+                    displayText = 'Showing: All Time';
+                    break;
+            }
+
+            // Store the date range for filtering
+            window.dateRangeStart = startDate;
+            window.dateRangeEnd = endDate;
+
+            // Update indicator
+            const indicator = document.getElementById('dateRangeIndicator');
+            if (indicator) {
+                indicator.textContent = displayText;
+            }
+
+            // Apply filters
+            applyFilters();
+        }
+
         function applyFilters() {
             const searchTerm = document.getElementById('searchBox').value.toLowerCase();
             const playerFilter = document.getElementById('filterPlayer').value;
             const fineFilter = document.getElementById('filterFine').value;
             const paidFilter = document.getElementById('filterPaid').value;
             const dateFilter = document.getElementById('filterDate').value;
-            
+
             const rows = document.querySelectorAll('#historyContent table tbody tr');
-            
+
             rows.forEach(row => {
                 const cells = row.cells;
-                const date = cells[0].textContent;
+                const dateDDMMYYYY = cells[0].textContent;
                 const player = cells[1].textContent;
                 const reason = cells[2].textContent;
                 const status = cells[4].textContent.includes('✓') ? 'paid' : 'unpaid';
-                
+
                 let show = true;
-                
+
                 // Search filter
                 if (searchTerm && !row.textContent.toLowerCase().includes(searchTerm)) {
                     show = false;
                 }
-                
+
                 // Player filter
                 if (playerFilter && player !== playerFilter) {
                     show = false;
                 }
-                
+
                 // Fine filter
                 if (fineFilter && !reason.includes(fineFilter)) {
                     show = false;
                 }
-                
+
                 // Paid filter
                 if (paidFilter && status !== paidFilter) {
                     show = false;
                 }
-                
-                // Date filter
-                if (dateFilter && !date.includes(formatDateDDMMYYYY(dateFilter))) {
+
+                // Date filter (specific date)
+                if (dateFilter && !dateDDMMYYYY.includes(formatDateDDMMYYYY(dateFilter))) {
                     show = false;
                 }
-                
+
+                // Date range filter
+                if (window.dateRangeStart || window.dateRangeEnd) {
+                    // Parse DD/MM/YYYY to Date object
+                    const parts = dateDDMMYYYY.split('/');
+                    if (parts.length === 3) {
+                        const fineDate = new Date(parts[2], parts[1] - 1, parts[0]);
+                        if (window.dateRangeStart && fineDate < window.dateRangeStart) {
+                            show = false;
+                        }
+                        if (window.dateRangeEnd && fineDate > window.dateRangeEnd) {
+                            show = false;
+                        }
+                    }
+                }
+
                 row.style.display = show ? '' : 'none';
             });
         }
@@ -913,6 +982,8 @@
                     `).join('')
                     : '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
             }
+
+            updateBatonRiskPrediction();
         }
 
         async function deleteBatonEntry(id) {
@@ -1184,6 +1255,230 @@
             }
         }
 
+        function copyUnpaidList() {
+            const unpaidByPlayer = {};
+            allFines.filter(f => !f.paid).forEach(fine => {
+                unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
+            });
+
+            if (Object.keys(unpaidByPlayer).length === 0) {
+                showToast('No unpaid fines!', 'info');
+                return;
+            }
+
+            const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
+            const totalUnpaid = sortedUnpaid.reduce((sum, [, amount]) => sum + amount, 0);
+
+            let message = `🍺 BOOZE BATON - Unpaid Fines 🍺\n\n`;
+            sortedUnpaid.forEach(([name, amount]) => {
+                message += `${name}: £${amount.toFixed(2)}\n`;
+            });
+            message += `\n💰 Total Unpaid: £${totalUnpaid.toFixed(2)}`;
+
+            navigator.clipboard.writeText(message).then(() => {
+                showToast('Unpaid list copied to clipboard!', 'success');
+            }).catch(() => {
+                showToast('Failed to copy to clipboard', 'error');
+            });
+        }
+
+        function copyPaymentReminder() {
+            const unpaidByPlayer = {};
+            allFines.filter(f => !f.paid).forEach(fine => {
+                unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
+            });
+
+            if (Object.keys(unpaidByPlayer).length === 0) {
+                showToast('No unpaid fines!', 'info');
+                return;
+            }
+
+            const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
+            const totalUnpaid = sortedUnpaid.reduce((sum, [, amount]) => sum + amount, 0);
+
+            let message = `🚨 PAYMENT REMINDER 🚨\n\n`;
+            message += `The following players have unpaid fines:\n\n`;
+            sortedUnpaid.forEach(([name, amount]) => {
+                message += `📌 ${name}: £${amount.toFixed(2)}\n`;
+            });
+            message += `\n💷 Total Outstanding: £${totalUnpaid.toFixed(2)}\n\n`;
+            message += `Please settle your fines ASAP! 💸`;
+
+            navigator.clipboard.writeText(message).then(() => {
+                showToast('Payment reminder copied!', 'success');
+            }).catch(() => {
+                showToast('Failed to copy to clipboard', 'error');
+            });
+        }
+
+        function updateLeaderboards() {
+            // Hall of Shame - Top 5 by total fines
+            const playerTotals = {};
+            allFines.forEach(fine => {
+                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+            });
+
+            const hallOfShame = Object.entries(playerTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const hallOfShameEl = document.getElementById('hallOfShameList');
+            if (hallOfShameEl) {
+                if (hallOfShame.length === 0) {
+                    hallOfShameEl.innerHTML = '<div style="color: #999; padding: 10px;">No data yet</div>';
+                } else {
+                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    hallOfShameEl.innerHTML = hallOfShame.map(([name, total], index) =>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
+                            <span>${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #C8102E;">£${total.toFixed(2)}</span>
+                        </div>`
+                    ).join('');
+                }
+            }
+
+            // Most Improved - Most fines paid in last 30 days
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const recentPayments = {};
+            allFines.filter(f => f.paid && f.paidDate).forEach(fine => {
+                const paidDate = new Date(fine.paidDate);
+                if (paidDate >= thirtyDaysAgo) {
+                    recentPayments[fine.playerName] = (recentPayments[fine.playerName] || 0) + fine.amount;
+                }
+            });
+
+            const mostImproved = Object.entries(recentPayments)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const mostImprovedEl = document.getElementById('mostImprovedList');
+            if (mostImprovedEl) {
+                if (mostImproved.length === 0) {
+                    mostImprovedEl.innerHTML = '<div style="color: #999; padding: 10px;">No payments in last 30 days</div>';
+                } else {
+                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    mostImprovedEl.innerHTML = mostImproved.map(([name, total], index) =>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
+                            <span>${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #00843D;">£${total.toFixed(2)} paid</span>
+                        </div>`
+                    ).join('');
+                }
+            }
+
+            // Clean Record - Zero unpaid, sorted by total paid
+            const unpaidByPlayer = {};
+            allFines.filter(f => !f.paid).forEach(fine => {
+                unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
+            });
+
+            const paidByPlayer = {};
+            allFines.filter(f => f.paid).forEach(fine => {
+                paidByPlayer[fine.playerName] = (paidByPlayer[fine.playerName] || 0) + fine.amount;
+            });
+
+            const cleanRecord = Object.entries(paidByPlayer)
+                .filter(([name]) => !unpaidByPlayer[name] || unpaidByPlayer[name] === 0)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const cleanRecordEl = document.getElementById('cleanRecordList');
+            if (cleanRecordEl) {
+                if (cleanRecord.length === 0) {
+                    cleanRecordEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with clean record yet</div>';
+                } else {
+                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    cleanRecordEl.innerHTML = cleanRecord.map(([name, total], index) =>
+                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
+                            <span>${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #1D428A;">£${total.toFixed(2)} paid</span>
+                        </div>`
+                    ).join('');
+                }
+            }
+        }
+
+        function updateBatonRiskPrediction() {
+            if (allPlayers.length === 0) {
+                const safeEl = document.getElementById('safePlayers');
+                const riskEl = document.getElementById('atRiskPlayers');
+                if (safeEl) safeEl.innerHTML = '<div style="color: #999; padding: 10px;">No player data yet</div>';
+                if (riskEl) riskEl.innerHTML = '<div style="color: #999; padding: 10px;">No player data yet</div>';
+                return;
+            }
+
+            // Calculate per-game fine rate for each player
+            const playerStats = allPlayers.map(player => {
+                const playerFines = allFines.filter(f => f.playerName === player.name);
+                const totalFines = playerFines.reduce((sum, f) => sum + f.amount, 0);
+                const totalGames = calculateTotalGames(player);
+                const finesPerGame = totalGames > 0 ? totalFines / totalGames : 0;
+
+                return {
+                    name: player.name,
+                    totalFines,
+                    totalGames,
+                    finesPerGame,
+                    fineCount: playerFines.length
+                };
+            }).filter(p => p.totalGames > 0); // Only include players with games played
+
+            // Sort by fines per game (ascending for safe, descending for at risk)
+            const sortedByRisk = [...playerStats].sort((a, b) => a.finesPerGame - b.finesPerGame);
+
+            // Top 5 safest players
+            const safePlayers = sortedByRisk.slice(0, 5);
+            const safePlayersEl = document.getElementById('safePlayers');
+            if (safePlayersEl) {
+                if (safePlayers.length === 0) {
+                    safePlayersEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with games played yet</div>';
+                } else {
+                    safePlayersEl.innerHTML = safePlayers.map((player, index) => {
+                        const icons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span>${icons[index]} ${player.name}</span>
+                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
+                                    ${player.totalGames} games played • ${player.fineCount} fines
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: bold; color: #00843D;">£${player.finesPerGame.toFixed(2)}/game</div>
+                                <div style="font-size: 0.85em; color: #666;">£${player.totalFines.toFixed(2)} total</div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            // Top 5 at-risk players (highest per-game rate)
+            const atRiskPlayers = sortedByRisk.slice(-5).reverse();
+            const atRiskPlayersEl = document.getElementById('atRiskPlayers');
+            if (atRiskPlayersEl) {
+                if (atRiskPlayers.length === 0) {
+                    atRiskPlayersEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with games played yet</div>';
+                } else {
+                    atRiskPlayersEl.innerHTML = atRiskPlayers.map((player, index) => {
+                        const icons = ['⚠️', '🔴', '🚨', '💀', '☠️'];
+                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span>${icons[index]} ${player.name}</span>
+                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
+                                    ${player.totalGames} games played • ${player.fineCount} fines
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: bold; color: #C8102E;">£${player.finesPerGame.toFixed(2)}/game</div>
+                                <div style="font-size: 0.85em; color: #666;">£${player.totalFines.toFixed(2)} total</div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }
+        }
+
         function exportData() {
             if (allFines.length === 0) {
                 alert('No data to export');
@@ -1207,6 +1502,151 @@
             a.href = url;
             a.download = `booze-baton-${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
+        }
+
+        function exportPDF() {
+            if (allFines.length === 0) {
+                showToast('No data to export', 'error');
+                return;
+            }
+
+            // Access jsPDF from window
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Title
+            doc.setFontSize(20);
+            doc.setTextColor(29, 66, 138); // Blue
+            doc.text('BOOZE BATON - Season Summary', 105, 20, { align: 'center' });
+
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 105, 28, { align: 'center' });
+
+            // Overall Stats
+            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPaid = totalPot - totalUnpaid;
+
+            doc.setFontSize(14);
+            doc.setTextColor(0);
+            doc.text('Season Statistics', 20, 40);
+
+            doc.setFontSize(11);
+            doc.text(`Total Fines: ${allFines.length}`, 20, 48);
+            doc.text(`Total Pot: £${totalPot.toFixed(2)}`, 20, 54);
+            doc.text(`Paid: £${totalPaid.toFixed(2)}`, 20, 60);
+            doc.text(`Unpaid: £${totalUnpaid.toFixed(2)}`, 20, 66);
+
+            // Player Breakdown
+            const playerTotals = {};
+            const playerUnpaid = {};
+            allFines.forEach(fine => {
+                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+                if (!fine.paid) {
+                    playerUnpaid[fine.playerName] = (playerUnpaid[fine.playerName] || 0) + fine.amount;
+                }
+            });
+
+            const topPlayers = Object.entries(playerTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            doc.setFontSize(14);
+            doc.text('Top 10 Players', 20, 78);
+
+            doc.setFontSize(10);
+            let yPos = 86;
+            topPlayers.forEach(([name, total], index) => {
+                const unpaid = playerUnpaid[name] || 0;
+                doc.text(`${index + 1}. ${name}`, 20, yPos);
+                doc.text(`£${total.toFixed(2)}`, 100, yPos);
+                doc.text(unpaid > 0 ? `(Unpaid: £${unpaid.toFixed(2)})` : '(All paid)', 130, yPos);
+                yPos += 6;
+            });
+
+            // Baton Winner
+            if (batonHistory.length > 0) {
+                const currentBaton = batonHistory[0];
+                doc.setFontSize(14);
+                doc.text('Baton Winner', 20, yPos + 8);
+                doc.setFontSize(11);
+                doc.setTextColor(200, 16, 46); // Red
+                doc.text(`${currentBaton.playerName}`, 20, yPos + 16);
+                doc.setTextColor(0);
+                doc.text(`Date: ${formatDateDDMMYYYY(currentBaton.timestamp)}`, 20, yPos + 22);
+            }
+
+            // Save the PDF
+            doc.save(`booze-baton-summary-${new Date().toISOString().split('T')[0]}.pdf`);
+            showToast('PDF exported successfully!', 'success');
+        }
+
+        function exportWhatsApp() {
+            if (allFines.length === 0) {
+                showToast('No data to export', 'error');
+                return;
+            }
+
+            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPaid = totalPot - totalUnpaid;
+
+            // Calculate player stats
+            const playerTotals = {};
+            const playerUnpaid = {};
+            const playerFineCount = {};
+
+            allFines.forEach(fine => {
+                playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
+                playerFineCount[fine.playerName] = (playerFineCount[fine.playerName] || 0) + 1;
+                if (!fine.paid) {
+                    playerUnpaid[fine.playerName] = (playerUnpaid[fine.playerName] || 0) + fine.amount;
+                }
+            });
+
+            const topPlayers = Object.entries(playerTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            // Build WhatsApp message
+            let message = `🍺 *BOOZE BATON - SEASON SUMMARY* 🍺\n`;
+            message += `📅 ${new Date().toLocaleDateString('en-GB')}\n\n`;
+
+            message += `📊 *SEASON STATS*\n`;
+            message += `Total Fines: ${allFines.length}\n`;
+            message += `💰 Total Pot: £${totalPot.toFixed(2)}\n`;
+            message += `✅ Paid: £${totalPaid.toFixed(2)}\n`;
+            message += `⚠️ Unpaid: £${totalUnpaid.toFixed(2)}\n\n`;
+
+            message += `🏆 *TOP 10 OFFENDERS*\n`;
+            topPlayers.forEach(([name, total], index) => {
+                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+                const unpaid = playerUnpaid[name] || 0;
+                const fineCount = playerFineCount[name] || 0;
+                message += `${medals[index]} ${name}: £${total.toFixed(2)} (${fineCount} fines)`;
+                if (unpaid > 0) {
+                    message += ` ⚠️ £${unpaid.toFixed(2)} unpaid`;
+                }
+                message += `\n`;
+            });
+
+            // Add baton winner if exists
+            if (batonHistory.length > 0) {
+                const currentBaton = batonHistory[0];
+                message += `\n🎯 *BATON WINNER*\n`;
+                message += `👑 ${currentBaton.playerName}\n`;
+                message += `📅 ${formatDateDDMMYYYY(currentBaton.timestamp)}\n`;
+            }
+
+            message += `\n_Generated by Booze Baton Tracker_`;
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(message).then(() => {
+                showToast('WhatsApp message copied to clipboard!', 'success');
+            }).catch(() => {
+                showToast('Failed to copy to clipboard', 'error');
+            });
         }
 
         function handleFileSelect(event, replaceAll = false) {
