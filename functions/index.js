@@ -7,6 +7,20 @@ const API_KEY = functions.config().football?.apikey || process.env.FOOTBALL_API_
 const API_HOST = 'api-football-v3.p.rapidapi.com';
 const API_BASE_URL = `https://${API_HOST}/`;
 
+// Admin PIN configuration
+// Set with: firebase functions:config:set admin.pin="YOUR_PIN"
+const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN || '1234';
+
+// Helper function to validate admin access
+function validateAdmin(pin) {
+  if (!pin || pin !== ADMIN_PIN) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Invalid admin PIN'
+    );
+  }
+}
+
 // Helper function to make API calls
 async function callFootballAPI(endpoint, params = {}) {
   if (!API_KEY) {

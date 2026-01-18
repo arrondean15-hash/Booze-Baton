@@ -38,6 +38,21 @@ firebase functions:config:set football.apikey="YOUR_RAPIDAPI_KEY_HERE"
 firebase functions:config:set football.apikey="abc123def456ghi789jkl012mno345pqr678"
 ```
 
+### 3. Configure Admin PIN (Optional but Recommended)
+
+For server-side PIN validation in the Team ID Finder:
+
+```bash
+firebase functions:config:set admin.pin="YOUR_4_DIGIT_PIN"
+```
+
+**Example:**
+```bash
+firebase functions:config:set admin.pin="5678"
+```
+
+**Note:** If not set, defaults to `1234`. Also update client-side PIN in `app.js`.
+
 ### 3. Verify Configuration (Optional)
 
 ```bash

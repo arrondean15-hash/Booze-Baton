@@ -893,3 +893,37 @@
                 grid-template-columns: repeat(5, 1fr);
             }
         }
+
+        /* Admin Team ID Finder Styles */
+        .team-result-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+
+        .team-result-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-color: #1D428A;
+        }
+
+        #adminPinInput {
+            text-align: center;
+            font-size: 1.2em;
+            letter-spacing: 0.3em;
+            font-weight: 600;
+        }
+
+        #teamSearchResults {
+            margin-top: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        #adminUnlockedPanel .info-text {
+            background: #e3f2fd;
+            border-left: 4px solid #1D428A;
+        }

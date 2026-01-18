@@ -3395,6 +3395,38 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 <button class="btn btn-secondary" onclick="addNewFineReason()">Add New Fine Type</button>
             </div>
 
+            <!-- Admin Team ID Finder -->
+            <div class="card" style="border: 2px solid #1D428A;">
+                <h3 style="margin-bottom: 10px; color: #1D428A;">🔐 Admin: Team ID Finder</h3>
+
+                <!-- Lock Screen -->
+                <div id="adminLockScreen">
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        🔒 This panel is restricted to admins only. Enter PIN to unlock.
+                    </div>
+                    <div class="form-group">
+                        <label>Admin PIN</label>
+                        <input type="password" id="adminPinInput" placeholder="Enter 4-digit PIN" maxlength="4" style="text-align: center; font-size: 1.2em; letter-spacing: 0.3em;">
+                    </div>
+                    <button class="btn" onclick="unlockAdminPanel()">🔓 Unlock</button>
+                </div>
+
+                <!-- Unlocked Admin Panel -->
+                <div id="adminUnlockedPanel" style="display: none;">
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        🎯 Search for football teams and set the baton holder. Uses API-Football via secure Cloud Functions.
+                    </div>
+
+                    <div class="form-group">
+                        <label>Search Football Club</label>
+                        <input type="text" id="teamSearchInput" placeholder="e.g., Leeds United, Arsenal, Real Madrid">
+                    </div>
+                    <button class="btn" onclick="searchTeamsAdmin()">🔍 Search Teams</button>
+
+                    <div id="teamSearchResults" style="margin-top: 20px; max-height: 600px; overflow-y: auto;"></div>
+                </div>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">Records</div>

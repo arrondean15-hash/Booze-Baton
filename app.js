@@ -1,5 +1,6 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -12,6 +13,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const functions = getFunctions(app);
 
         let fineReasons = [
             { reason: "10 minutes late", amount: 2.00 },
@@ -97,6 +99,145 @@
                 chartsIndicator.textContent = scopeText;
                 chartsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
                 chartsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
+            }
+        }
+
+        // ADMIN TEAM ID FINDER
+        // Simple PIN-based admin authentication
+        let isAdminAuthenticated = false;
+        const ADMIN_PIN = '1234'; // CHANGE THIS to your preferred PIN
+
+        function unlockAdminPanel() {
+            const inputPin = document.getElementById('adminPinInput').value;
+            if (inputPin === ADMIN_PIN) {
+                isAdminAuthenticated = true;
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminUnlockedPanel').style.display = 'block';
+                showToast('Admin panel unlocked', 'success');
+            } else {
+                showToast('Incorrect PIN', 'error');
+            }
+        }
+
+        // Team search results cache
+        let teamSearchResults = [];
+
+        async function searchTeamsAdmin() {
+            const query = document.getElementById('teamSearchInput').value.trim();
+
+            if (!query) {
+                showToast('Please enter a team name', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('teamSearchResults');
+            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Searching...</div>';
+
+            try {
+                const searchTeams = httpsCallable(functions, 'searchTeams');
+                const result = await searchTeams({ query });
+
+                teamSearchResults = result.data || [];
+
+                if (teamSearchResults.length === 0) {
+                    resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">No teams found</div>';
+                    return;
+                }
+
+                // Display results
+                resultsDiv.innerHTML = teamSearchResults.map((team, index) => `
+                    <div class="team-result-card">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            ${team.logo ? `<img src="${team.logo}" alt="${team.teamName}" style="width: 40px; height: 40px; border-radius: 4px;">` : '<div style="width: 40px; height: 40px; background: #e0e0e0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 20px;">⚽</div>'}
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 1.1em; color: #1D428A;">${team.teamName}</div>
+                                <div style="font-size: 0.9em; color: #666;">
+                                    ${team.country}${team.city ? ` • ${team.city}` : ''}
+                                </div>
+                                <div style="font-size: 0.85em; color: #999; margin-top: 2px;">
+                                    Team ID: ${team.teamId}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="saveToKnownTeams(${index})" style="font-size: 0.9em; padding: 8px 12px;">
+                                💾 Save Team
+                            </button>
+                            <button class="btn" onclick="setAsBatonHolder(${index})" style="font-size: 0.9em; padding: 8px 12px; background: #00843D;">
+                                🎯 Set as Holder
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+                showToast(`Found ${teamSearchResults.length} teams`, 'success');
+
+            } catch (error) {
+                console.error('Error searching teams:', error);
+                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams. Make sure Cloud Functions are deployed.</div>';
+                showToast('Search failed: ' + error.message, 'error');
+            }
+        }
+
+        async function saveToKnownTeams(index) {
+            const team = teamSearchResults[index];
+            if (!team) return;
+
+            try {
+                showLoading('Saving team...');
+
+                // Use teamId as document ID to prevent duplicates
+                await setDoc(doc(db, 'known_teams', String(team.teamId)), {
+                    teamId: team.teamId,
+                    teamName: team.teamName,
+                    country: team.country,
+                    city: team.city || null,
+                    logo: team.logo || null,
+                    createdAt: new Date().toISOString()
+                });
+
+                hideLoading();
+                showToast(`${team.teamName} saved to known teams`, 'success');
+
+            } catch (error) {
+                console.error('Error saving team:', error);
+                hideLoading();
+                showToast('Failed to save team', 'error');
+            }
+        }
+
+        async function setAsBatonHolder(index) {
+            const team = teamSearchResults[index];
+            if (!team) return;
+
+            if (!confirm(`Set ${team.teamName} (${team.country}) as the current baton holder?`)) {
+                return;
+            }
+
+            try {
+                showLoading('Updating baton holder...');
+
+                // Update baton_current document
+                await setDoc(doc(db, 'baton_current', 'holder'), {
+                    holderTeamId: team.teamId,
+                    holderTeamName: team.teamName,
+                    holderCountry: team.country,
+                    holderCity: team.city || null,
+                    holderLogo: team.logo || null,
+                    lastUpdatedAt: new Date().toISOString(),
+                    updatedBy: 'admin'
+                });
+
+                // Also save to known teams
+                await saveToKnownTeams(index);
+
+                hideLoading();
+                showToast(`Baton holder set to ${team.teamName}`, 'success');
+
+            } catch (error) {
+                console.error('Error setting baton holder:', error);
+                hideLoading();
+                showToast('Failed to set baton holder', 'error');
             }
         }
 
