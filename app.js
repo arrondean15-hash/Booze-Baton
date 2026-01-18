@@ -1,5 +1,6 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -12,6 +13,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const functions = getFunctions(app);
 
         let fineReasons = [
             { reason: "10 minutes late", amount: 2.00 },
@@ -62,6 +64,353 @@
         let activeListenerCount = 0; // Track active snapshot listeners
         const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
+        // CANONICAL DATASET SELECTOR FOR ANALYTICS
+        // Single source of truth: returns full history if loaded, else recent 200
+        // This ensures all stats/charts/leaderboards use the most complete data available
+        function getFinesForAnalytics() {
+            return (Array.isArray(cachedFullFines) && cachedFullFines.length > 0)
+                ? cachedFullFines
+                : allFines; // fallback to bounded realtime (recent 200)
+        }
+
+        // Get scope indicator text for UI
+        function getAnalyticsScopeText() {
+            if (cachedFullFines.length > 0) {
+                const time = lastHistoryFetch ? lastHistoryFetch.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+                return `Stats scope: Full history (${cachedFullFines.length} fines, refreshed ${time})`;
+            }
+            return `Stats scope: Recent ${allFines.length} fines (refresh history for full stats)`;
+        }
+
+        // Update scope indicators in UI
+        function updateScopeIndicators() {
+            const scopeText = getAnalyticsScopeText();
+            const statsIndicator = document.getElementById('statsScopeIndicator');
+            const chartsIndicator = document.getElementById('chartsScopeIndicator');
+
+            if (statsIndicator) {
+                const isFullHistory = cachedFullFines.length > 0;
+                statsIndicator.textContent = scopeText;
+                statsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                statsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
+            }
+            if (chartsIndicator) {
+                const isFullHistory = cachedFullFines.length > 0;
+                chartsIndicator.textContent = scopeText;
+                chartsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                chartsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
+            }
+        }
+
+        // ADMIN TEAM ID FINDER
+        // Simple PIN-based admin authentication
+        let isAdminAuthenticated = false;
+        const ADMIN_PIN = '1234'; // CHANGE THIS to your preferred PIN
+
+        function unlockAdminPanel() {
+            const inputPin = document.getElementById('adminPinInput').value;
+            if (inputPin === ADMIN_PIN) {
+                isAdminAuthenticated = true;
+                document.getElementById('adminLockScreen').style.display = 'none';
+                document.getElementById('adminUnlockedPanel').style.display = 'block';
+                showToast('Admin panel unlocked', 'success');
+            } else {
+                showToast('Incorrect PIN', 'error');
+            }
+        }
+
+        // Team search results cache
+        let teamSearchResults = [];
+
+        async function searchTeamsAdmin() {
+            const query = document.getElementById('teamSearchInput').value.trim();
+
+            if (!query) {
+                showToast('Please enter a team name', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('teamSearchResults');
+            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Searching...</div>';
+
+            try {
+                const searchTeams = httpsCallable(functions, 'searchTeams');
+                const result = await searchTeams({ query });
+
+                teamSearchResults = result.data || [];
+
+                if (teamSearchResults.length === 0) {
+                    resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">No teams found</div>';
+                    return;
+                }
+
+                // Display results
+                resultsDiv.innerHTML = teamSearchResults.map((team, index) => `
+                    <div class="team-result-card">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            ${team.logo ? `<img src="${team.logo}" alt="${team.teamName}" style="width: 40px; height: 40px; border-radius: 4px;">` : '<div style="width: 40px; height: 40px; background: #e0e0e0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 20px;">⚽</div>'}
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 1.1em; color: #1D428A;">${team.teamName}</div>
+                                <div style="font-size: 0.9em; color: #666;">
+                                    ${team.country}${team.city ? ` • ${team.city}` : ''}
+                                </div>
+                                <div style="font-size: 0.85em; color: #999; margin-top: 2px;">
+                                    Team ID: ${team.teamId}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="saveToKnownTeams(${index})" style="font-size: 0.9em; padding: 8px 12px;">
+                                💾 Save Team
+                            </button>
+                            <button class="btn" onclick="setAsBatonHolder(${index})" style="font-size: 0.9em; padding: 8px 12px; background: #00843D;">
+                                🎯 Set as Holder
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+                showToast(`Found ${teamSearchResults.length} teams`, 'success');
+
+            } catch (error) {
+                console.error('Error searching teams:', error);
+                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams. Make sure Cloud Functions are deployed.</div>';
+                showToast('Search failed: ' + error.message, 'error');
+            }
+        }
+
+        async function saveToKnownTeams(index) {
+            const team = teamSearchResults[index];
+            if (!team) return;
+
+            try {
+                showLoading('Saving team...');
+
+                // Use teamId as document ID to prevent duplicates
+                await setDoc(doc(db, 'known_teams', String(team.teamId)), {
+                    teamId: team.teamId,
+                    teamName: team.teamName,
+                    country: team.country,
+                    city: team.city || null,
+                    logo: team.logo || null,
+                    createdAt: new Date().toISOString()
+                });
+
+                hideLoading();
+                showToast(`${team.teamName} saved to known teams`, 'success');
+
+            } catch (error) {
+                console.error('Error saving team:', error);
+                hideLoading();
+                showToast('Failed to save team', 'error');
+            }
+        }
+
+        async function setAsBatonHolder(index) {
+            const team = teamSearchResults[index];
+            if (!team) return;
+
+            if (!confirm(`Set ${team.teamName} (${team.country}) as the current baton holder?`)) {
+                return;
+            }
+
+            try {
+                showLoading('Updating baton holder...');
+
+                // Update baton_current document
+                await setDoc(doc(db, 'baton_current', 'holder'), {
+                    holderTeamId: team.teamId,
+                    holderTeamName: team.teamName,
+                    holderCountry: team.country,
+                    holderCity: team.city || null,
+                    holderLogo: team.logo || null,
+                    lastUpdatedAt: new Date().toISOString(),
+                    updatedBy: 'admin'
+                });
+
+                // Also save to known teams
+                await saveToKnownTeams(index);
+
+                hideLoading();
+                showToast(`Baton holder set to ${team.teamName}`, 'success');
+
+            } catch (error) {
+                console.error('Error setting baton holder:', error);
+                hideLoading();
+                showToast('Failed to set baton holder', 'error');
+            }
+        }
+
+        // MANUAL BATON UPDATE
+        // Checks latest match result and moves baton if holder lost
+        let isUpdatingBaton = false;
+
+        async function manualUpdateBaton() {
+            if (isUpdatingBaton) {
+                showToast('Baton update already in progress', 'info');
+                return;
+            }
+
+            if (!isAdminAuthenticated) {
+                showToast('Please unlock admin panel first', 'error');
+                return;
+            }
+
+            try {
+                isUpdatingBaton = true;
+
+                // Update UI to show loading state
+                const updateBtn = document.getElementById('updateBatonBtn');
+                if (updateBtn) {
+                    updateBtn.disabled = true;
+                    updateBtn.innerHTML = '⏳ Checking latest match...';
+                }
+
+                showLoading('Checking latest match result...');
+
+                // Call Cloud Function
+                const updateBaton = httpsCallable(functions, 'updateBaton');
+                const result = await updateBaton({ adminPin: ADMIN_PIN });
+
+                hideLoading();
+
+                const data = result.data;
+
+                // Display result based on status
+                if (data.status === 'moved') {
+                    // Baton moved - show detailed message
+                    const msg = `
+🍺 BATON MOVED! 🍺
+
+${data.previousHolder} → ${data.newHolder}
+
+Match: ${data.match.home} ${data.match.score} ${data.match.away}
+Competition: ${data.match.competition}
+
+${data.reason}
+                    `.trim();
+
+                    alert(msg);
+                    showToast(`Baton moved to ${data.newHolder}!`, 'success');
+
+                } else if (data.status === 'stayed') {
+                    // Baton stayed
+                    const msg = `
+🍺 BATON STAYED 🍺
+
+Holder: ${data.holder}
+
+Match: ${data.match.home} ${data.match.score} ${data.match.away}
+Competition: ${data.match.competition}
+
+${data.reason}
+                    `.trim();
+
+                    alert(msg);
+                    showToast(`Baton stayed with ${data.holder}`, 'info');
+
+                } else {
+                    // No update
+                    alert(data.message);
+                    showToast(data.message, 'info');
+                }
+
+                // Refresh baton display
+                await loadBatonHolder();
+                updateBatonTracker();
+                updateSpakkaTab();
+
+            } catch (error) {
+                console.error('Error updating baton:', error);
+                hideLoading();
+
+                let errorMsg = 'Failed to update baton';
+                if (error.code === 'permission-denied') {
+                    errorMsg = 'Invalid admin PIN';
+                } else if (error.code === 'not-found') {
+                    errorMsg = 'No baton holder set. Use Team ID Finder first.';
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                alert('❌ Error: ' + errorMsg);
+                showToast(errorMsg, 'error');
+
+            } finally {
+                isUpdatingBaton = false;
+
+                // Reset button
+                const updateBtn = document.getElementById('updateBatonBtn');
+                if (updateBtn) {
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = '🔄 Update Baton';
+                }
+            }
+        }
+
+        // Load and display current baton holder from Firestore
+        let currentBatonHolder = null;
+
+        async function loadBatonHolder() {
+            try {
+                const holderDoc = await getDocs(query(collection(db, 'baton_current')));
+
+                if (holderDoc.empty) {
+                    currentBatonHolder = null;
+                    return;
+                }
+
+                holderDoc.forEach((doc) => {
+                    currentBatonHolder = doc.data();
+                });
+
+                updateBatonHolderDisplay();
+
+            } catch (error) {
+                console.error('Error loading baton holder:', error);
+            }
+        }
+
+        function updateBatonHolderDisplay() {
+            const displayEl = document.getElementById('currentBatonHolderDisplay');
+            if (!displayEl) return;
+
+            if (!currentBatonHolder) {
+                displayEl.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <div style="font-size: 2em; margin-bottom: 10px;">🍺</div>
+                        <p>No baton holder set</p>
+                        <p style="font-size: 0.9em; color: #999;">Use Team ID Finder in Settings to set initial holder</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const lastUpdated = currentBatonHolder.lastUpdatedAt
+                ? new Date(currentBatonHolder.lastUpdatedAt.toDate ? currentBatonHolder.lastUpdatedAt.toDate() : currentBatonHolder.lastUpdatedAt).toLocaleString('en-GB')
+                : 'Unknown';
+
+            displayEl.innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    ${currentBatonHolder.holderLogo ? `<img src="${currentBatonHolder.holderLogo}" alt="${currentBatonHolder.holderTeamName}" style="width: 80px; height: 80px; border-radius: 8px; margin-bottom: 15px;">` : ''}
+                    <div style="font-size: 2em; font-weight: bold; color: #1D428A; margin-bottom: 5px;">
+                        ${currentBatonHolder.holderTeamName}
+                    </div>
+                    <div style="font-size: 1.1em; color: #666; margin-bottom: 10px;">
+                        ${currentBatonHolder.holderCountry}${currentBatonHolder.holderCity ? ` • ${currentBatonHolder.holderCity}` : ''}
+                    </div>
+                    <div style="font-size: 0.85em; color: #999; margin-top: 10px;">
+                        Last updated: ${lastUpdated}
+                    </div>
+                    ${currentBatonHolder.lastProcessedMatchId ? `
+                        <div style="font-size: 0.8em; color: #999; margin-top: 5px;">
+                            Last match ID: ${currentBatonHolder.lastProcessedMatchId}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
         window.deleteFine = deleteFine;
@@ -73,6 +422,12 @@
         window.exportData = exportData;
         window.exportPDF = exportPDF;
         window.exportWhatsApp = exportWhatsApp;
+        window.manualUpdateBaton = manualUpdateBaton;
+        window.loadBatonHolder = loadBatonHolder;
+        window.unlockAdminPanel = unlockAdminPanel;
+        window.searchTeamsAdmin = searchTeamsAdmin;
+        window.saveToKnownTeams = saveToKnownTeams;
+        window.setAsBatonHolder = setAsBatonHolder;
         window.copyUnpaidList = copyUnpaidList;
         window.copyPaymentReminder = copyPaymentReminder;
         window.closePaidModal = closePaidModal;
@@ -134,6 +489,8 @@
             console.log('✅ Loading players...');
             loadFineReasons();
             console.log('✅ Loading fine reasons...');
+            loadBatonHolder();
+            console.log('✅ Loading baton holder...');
 
             setTimeout(hideLoading, 500);
         }
@@ -309,6 +666,27 @@
                     allFines.push({ id: d.id, ...d.data() });
                 });
                 console.log(`📊 Fines snapshot: ${allFines.length} recent fines loaded`);
+
+                // MERGE: If cachedFullFines loaded, update it with new/changed docs
+                if (cachedFullFines.length > 0) {
+                    snapshot.forEach((d) => {
+                        const newDoc = { id: d.id, ...d.data() };
+                        const existingIndex = cachedFullFines.findIndex(f => f.id === newDoc.id);
+                        if (existingIndex >= 0) {
+                            cachedFullFines[existingIndex] = newDoc; // Update existing
+                        } else {
+                            cachedFullFines.unshift(newDoc); // Add new at start
+                        }
+                    });
+                    // Re-sort by timestamp desc
+                    cachedFullFines.sort((a, b) => {
+                        const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime();
+                        const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime();
+                        return timeB - timeA;
+                    });
+                    console.log(`🔄 Merged realtime updates into cachedFullFines (${cachedFullFines.length} total)`);
+                }
+
                 updateAll(); // NOTE: updateAll() does NOT update History anymore
             });
             activeListenerCount++;
@@ -648,27 +1026,30 @@
             updateFineReasonsTable();
             updateCharts();
             updateSpakkaTab();
-            document.getElementById('totalRecords').textContent = allFines.length;
+            const fines = getFinesForAnalytics();
+            document.getElementById('totalRecords').textContent = fines.length;
         }
 
         function updateStats() {
-            const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, fine) => sum + fine.amount, 0);
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const totalPot = fines.reduce((sum, fine) => sum + fine.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, fine) => sum + fine.amount, 0);
 
             document.getElementById('totalPot').textContent = `£${totalPot.toFixed(0)}`;
             document.getElementById('totalUnpaid').textContent = `£${totalUnpaid.toFixed(0)}`;
-            document.getElementById('totalFines').textContent = allFines.length;
+            document.getElementById('totalFines').textContent = fines.length;
             document.getElementById('batonTotalPot').textContent = `£${totalPot.toFixed(0)}`;
 
             const playerTotals = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
             });
-            
+
             const worstOffender = Object.entries(playerTotals).sort((a, b) => b[1] - a[1])[0];
             document.getElementById('worstOffender').textContent = worstOffender ? worstOffender[0] : '-';
 
             updateLeaderboards();
+            updateScopeIndicators(); // Update scope labels
         }
 
         function updatePlayerStats() {
@@ -684,7 +1065,8 @@
                 return;
             }
 
-            const playerFines = allFines ? allFines.filter(f => f.playerName === selectedPlayer) : [];
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const playerFines = fines ? fines.filter(f => f.playerName === selectedPlayer) : [];
             const player = allPlayers ? allPlayers.find(p => p.name === selectedPlayer) : null;
 
             if (playerFines.length === 0) {
@@ -905,6 +1287,7 @@
                 // Update the UI
                 updateHistory();
                 applyFilters(); // Re-apply any active filters
+                updateAll(); // CRITICAL: Recompute all stats/charts with full dataset
 
                 return true;
             } catch (error) {
@@ -994,14 +1377,15 @@
 
         function updatePlayers() {
             const playersContent = document.getElementById('playersContent');
-            
-            if (allFines.length === 0) {
+
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 playersContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><p>No players yet</p></div>';
                 return;
             }
 
             const playerStats = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 if (!playerStats[fine.playerName]) {
                     playerStats[fine.playerName] = {
                         total: 0,
@@ -1015,7 +1399,7 @@
                     playerStats[fine.playerName].unpaid += fine.amount;
                 }
                 playerStats[fine.playerName].count += 1;
-                playerStats[fine.playerName].reasons[fine.reason] = 
+                playerStats[fine.playerName].reasons[fine.reason] =
                     (playerStats[fine.playerName].reasons[fine.reason] || 0) + 1;
             });
 
@@ -1077,6 +1461,7 @@
             const forfeitTable = document.getElementById('forfeitTable');
             if (!forfeitTable) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerStats = {};
             // First, initialize all players
             if (allPlayers && allPlayers.length > 0) {
@@ -1089,8 +1474,8 @@
             }
 
             // Then add fine totals
-            if (allFines && allFines.length > 0) {
-                allFines.forEach(fine => {
+            if (fines && fines.length > 0) {
+                fines.forEach(fine => {
                     if (playerStats[fine.playerName]) {
                         playerStats[fine.playerName].total += fine.amount;
                     }
@@ -1176,13 +1561,15 @@
             const potElement = document.getElementById('spakkaTotalPot');
             if (!potElement) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+
             // Update total pot
-            const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
+            const totalPot = fines.reduce((sum, fine) => sum + fine.amount, 0);
             potElement.textContent = `£${totalPot.toFixed(0)}`;
 
             // Update unpaid list - show who owes money
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1206,7 +1593,7 @@
 
             // Update top offenders - who has most fines
             const totalsByPlayer = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 totalsByPlayer[fine.playerName] = (totalsByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1252,7 +1639,7 @@
                         games: calculateTotalGames(player)
                     };
                 });
-                allFines.forEach(fine => {
+                fines.forEach(fine => {
                     if (playerStats[fine.playerName]) {
                         playerStats[fine.playerName].total += fine.amount;
                     }
@@ -1427,8 +1814,9 @@
         }
 
         function copyUnpaidList() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1454,8 +1842,9 @@
         }
 
         function copyPaymentReminder() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1483,10 +1872,12 @@
         }
 
         function updateLeaderboards() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+
             // Hall of Shame - Top 5 by total fines
             const playerTotals = {};
-            if (allFines && allFines.length > 0) {
-                allFines.forEach(fine => {
+            if (fines && fines.length > 0) {
+                fines.forEach(fine => {
                     if (fine && fine.playerName && fine.amount) {
                         playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                     }
@@ -1517,7 +1908,7 @@
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
             const recentPayments = {};
-            allFines.filter(f => f.paid && f.paidDate).forEach(fine => {
+            fines.filter(f => f.paid && f.paidDate).forEach(fine => {
                 const paidDate = new Date(fine.paidDate);
                 if (paidDate >= thirtyDaysAgo) {
                     recentPayments[fine.playerName] = (recentPayments[fine.playerName] || 0) + fine.amount;
@@ -1545,12 +1936,12 @@
 
             // Clean Record - Zero unpaid, sorted by total paid
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
             const paidByPlayer = {};
-            allFines.filter(f => f.paid).forEach(fine => {
+            fines.filter(f => f.paid).forEach(fine => {
                 paidByPlayer[fine.playerName] = (paidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1584,9 +1975,10 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Calculate per-game fine rate for each player
             const playerStats = allPlayers.map(player => {
-                const playerFines = allFines.filter(f => f.playerName === player.name);
+                const playerFines = fines.filter(f => f.playerName === player.name);
                 const totalFines = playerFines.reduce((sum, f) => sum + f.amount, 0);
                 const totalGames = calculateTotalGames(player);
                 const finesPerGame = totalGames > 0 ? totalFines / totalGames : 0;
@@ -1655,14 +2047,15 @@
         }
 
         function exportData() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 alert('No data to export');
                 return;
             }
 
             const csv = [
                 ['Name', 'Date', 'Fine', 'Amount', 'Paid'],
-                ...allFines.map(f => [
+                ...fines.map(f => [
                     f.playerName,
                     f.date,
                     f.reason,
@@ -1680,7 +2073,8 @@
         }
 
         function exportPDF() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 showToast('No data to export', 'error');
                 return;
             }
@@ -1699,8 +2093,8 @@
             doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 105, 28, { align: 'center' });
 
             // Overall Stats
-            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPot = fines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
             const totalPaid = totalPot - totalUnpaid;
 
             doc.setFontSize(14);
@@ -1708,7 +2102,7 @@
             doc.text('Season Statistics', 20, 40);
 
             doc.setFontSize(11);
-            doc.text(`Total Fines: ${allFines.length}`, 20, 48);
+            doc.text(`Total Fines: ${fines.length}`, 20, 48);
             doc.text(`Total Pot: £${totalPot.toFixed(2)}`, 20, 54);
             doc.text(`Paid: £${totalPaid.toFixed(2)}`, 20, 60);
             doc.text(`Unpaid: £${totalUnpaid.toFixed(2)}`, 20, 66);
@@ -1716,7 +2110,7 @@
             // Player Breakdown
             const playerTotals = {};
             const playerUnpaid = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                 if (!fine.paid) {
                     playerUnpaid[fine.playerName] = (playerUnpaid[fine.playerName] || 0) + fine.amount;
@@ -1758,13 +2152,14 @@
         }
 
         function exportWhatsApp() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 showToast('No data to export', 'error');
                 return;
             }
 
-            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPot = fines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
             const totalPaid = totalPot - totalUnpaid;
 
             // Calculate player stats
@@ -1772,7 +2167,7 @@
             const playerUnpaid = {};
             const playerFineCount = {};
 
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                 playerFineCount[fine.playerName] = (playerFineCount[fine.playerName] || 0) + 1;
                 if (!fine.paid) {
@@ -1789,7 +2184,7 @@
             message += `📅 ${new Date().toLocaleDateString('en-GB')}\n\n`;
 
             message += `📊 *SEASON STATS*\n`;
-            message += `Total Fines: ${allFines.length}\n`;
+            message += `Total Fines: ${fines.length}\n`;
             message += `💰 Total Pot: £${totalPot.toFixed(2)}\n`;
             message += `✅ Paid: £${totalPaid.toFixed(2)}\n`;
             message += `⚠️ Unpaid: £${totalUnpaid.toFixed(2)}\n\n`;
@@ -2133,7 +2528,8 @@
         };
 
         function updateCharts() {
-            if (allFines.length === 0) return;
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) return;
 
             updatePlayerFinesChart();
             updatePerGameChart();
@@ -2147,8 +2543,9 @@
             const ctx = document.getElementById('playerFinesChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerTotals = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
             });
 
@@ -2210,6 +2607,7 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerStats = {};
             try {
                 allPlayers.forEach(player => {
@@ -2221,8 +2619,8 @@
                     }
                 });
 
-                if (allFines && allFines.length > 0) {
-                    allFines.forEach(fine => {
+                if (fines && fines.length > 0) {
+                    fines.forEach(fine => {
                         if (fine && playerStats[fine.playerName]) {
                             playerStats[fine.playerName].total += (fine.amount || 0);
                         }
@@ -2295,8 +2693,9 @@
             const ctx = document.getElementById('fineTypesChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const fineTypeCounts = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 fineTypeCounts[fine.reason] = (fineTypeCounts[fine.reason] || 0) + 1;
             });
 
@@ -2345,8 +2744,9 @@
             const ctx = document.getElementById('paymentChart');
             if (!ctx) return;
 
-            const paid = allFines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
-            const unpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const paid = fines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
 
             if (charts.payment) charts.payment.destroy();
             charts.payment = new Chart(ctx, {
@@ -2385,8 +2785,9 @@
             const ctx = document.getElementById('trendsChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const finesByMonth = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 const date = new Date(fine.date);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 finesByMonth[monthKey] = (finesByMonth[monthKey] || 0) + fine.amount;
@@ -2451,9 +2852,10 @@
             const selector = document.getElementById('fineTypeAnalysisSelector');
             if (!selector) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Get unique fine types from all fines
             const fineTypes = new Set();
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 if (fine && fine.reason) {
                     fineTypes.add(fine.reason);
                 }
@@ -2494,8 +2896,9 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Filter fines by selected type
-            const finesOfType = allFines.filter(f => f.reason === selectedFineType);
+            const finesOfType = fines.filter(f => f.reason === selectedFineType);
 
             if (finesOfType.length === 0) {
                 content.innerHTML = `
