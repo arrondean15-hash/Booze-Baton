@@ -160,28 +160,53 @@
             document.getElementById('fineForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 console.log('📝 Form submitted');
-                
-                const fine = {
-                    playerName: document.getElementById('playerName').value,
-                    reason: document.getElementById('fineReason').value,
-                    amount: parseFloat(document.getElementById('fineAmount').value),
-                    date: document.getElementById('fineDate').value,
-                    paid: false,
-                    paidDate: null,
-                    timestamp: new Date().toISOString()
-                };
 
-                console.log('📝 Fine data:', fine);
+                // Get selected players from checkboxes
+                const selectedCheckboxes = document.querySelectorAll('input[name="selectedPlayers"]:checked');
+                const selectedPlayers = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+                if (selectedPlayers.length === 0) {
+                    showToast('Please select at least one player', 'error');
+                    return;
+                }
+
+                const reason = document.getElementById('fineReason').value;
+                const amount = parseFloat(document.getElementById('fineAmount').value);
+                const date = document.getElementById('fineDate').value;
+
+                if (!reason || !amount || !date) {
+                    showToast('Please fill in all fields', 'error');
+                    return;
+                }
 
                 try {
-                    console.log('💾 Saving to Firebase...');
-                    showLoading('Adding fine...');
-                    await addDoc(collection(db, 'fines'), fine);
-                    console.log('✅ Saved successfully!');
+                    console.log('💾 Saving fines for', selectedPlayers.length, 'player(s)...');
+                    showLoading(`Adding fine${selectedPlayers.length > 1 ? 's' : ''}...`);
+
+                    // Add a fine for each selected player
+                    for (const playerName of selectedPlayers) {
+                        const fine = {
+                            playerName: playerName,
+                            reason: reason,
+                            amount: amount,
+                            date: date,
+                            paid: false,
+                            paidDate: null,
+                            timestamp: new Date().toISOString()
+                        };
+                        await addDoc(collection(db, 'fines'), fine);
+                        console.log('✅ Saved fine for', playerName);
+                    }
+
                     hideLoading();
                     e.target.reset();
                     setDefaultDate();
-                    showToast(`Fine added for ${fine.playerName}!`, 'success');
+
+                    if (selectedPlayers.length === 1) {
+                        showToast(`Fine added for ${selectedPlayers[0]}!`, 'success');
+                    } else {
+                        showToast(`Fines added for ${selectedPlayers.length} players!`, 'success');
+                    }
                 } catch (error) {
                     console.error('❌ Firebase error:', error);
                     hideLoading();
@@ -245,6 +270,7 @@
                 }
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -258,22 +284,43 @@
         }
 
         function updatePlayerDropdowns() {
+            // Update player checkboxes for multi-select in Add Fine form
+            const playerCheckboxes = document.getElementById('playerCheckboxes');
+            if (playerCheckboxes) {
+                if (allPlayers.length === 0) {
+                    playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px;">No players yet. Add players in the Manage tab.</div>';
+                } else {
+                    playerCheckboxes.innerHTML = allPlayers.map(player => `
+                        <label style="display: flex; align-items: center; padding: 8px; margin-bottom: 5px; cursor: pointer; border-radius: 6px; transition: background 0.2s;"
+                               onmouseover="this.style.background='#f5f5f5'"
+                               onmouseout="this.style.background='white'">
+                            <input type="checkbox" name="selectedPlayers" value="${player.name}"
+                                   style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span style="font-size: 1em; color: #333;">${player.name}</span>
+                        </label>
+                    `).join('');
+                }
+            }
+
+            // Keep backwards compatibility for old select element if it exists
             const addFineSelect = document.getElementById('playerName');
             const statsSelect = document.getElementById('playerSelector');
             const filterSelect = document.getElementById('filterPlayer');
             const deleteSelect = document.getElementById('deletePlayerSelect');
-            
-            addFineSelect.innerHTML = '<option value="">Select player...</option>';
-            statsSelect.innerHTML = '<option value="all">All Players</option>';
-            filterSelect.innerHTML = '<option value="">All Players</option>';
-            deleteSelect.innerHTML = '<option value="">Select player to delete...</option>';
-            
+
+            if (addFineSelect) addFineSelect.innerHTML = '<option value="">Select player...</option>';
+            if (statsSelect) statsSelect.innerHTML = '<option value="all">All Players</option>';
+            if (filterSelect) filterSelect.innerHTML = '<option value="">All Players</option>';
+            if (deleteSelect) deleteSelect.innerHTML = '<option value="">Select player to delete...</option>';
+
             allPlayers.forEach(player => {
                 [addFineSelect, statsSelect, filterSelect, deleteSelect].forEach(select => {
-                    const option = document.createElement('option');
-                    option.value = player.name;
-                    option.textContent = player.name;
-                    select.appendChild(option);
+                    if (select) {
+                        const option = document.createElement('option');
+                        option.value = player.name;
+                        option.textContent = player.name;
+                        select.appendChild(option);
+                    }
                 });
             });
         }
@@ -288,6 +335,39 @@
 
         function updateManagePlayersTable() {
             const table = document.getElementById('managePlayersTable');
+            if (!table) return;
+
+            if (allPlayers.length === 0) {
+                table.innerHTML = '<div class="empty-state"><p>No players yet</p></div>';
+                return;
+            }
+
+            table.innerHTML = allPlayers.map(player => {
+                const total = calculateTotalGames(player);
+                return `
+                    <div class="player-card">
+                        <div class="player-name">${player.name}</div>
+                        <div class="games-tracking">
+                            <div class="games-row">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 0.85em;">EAFC 26</label>
+                                    <input type="number" class="games-input" value="${player.eafc26 || 0}"
+                                           onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
+                                </div>
+                            </div>
+                            <div class="games-total">
+                                Total Games: ${total}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateSettingsPlayersTable() {
+            const table = document.getElementById('settingsPlayersTable');
+            if (!table) return;
+
             if (allPlayers.length === 0) {
                 table.innerHTML = '<div class="empty-state"><p>No players yet</p></div>';
                 return;
@@ -302,26 +382,22 @@
                             <div class="games-row">
                                 <div>
                                     <label style="font-size: 0.85em;">EAFC 25</label>
-                                    <input type="number" class="games-input" value="${player.eafc25 || 0}" 
+                                    <input type="number" class="games-input" value="${player.eafc25 || 0}"
                                            onchange="updateGamesField('${player.name}', 'eafc25', this.value)">
                                 </div>
                                 <div>
                                     <label style="font-size: 0.85em;">Season 24/25</label>
-                                    <input type="number" class="games-input" value="${player.season2425 || 0}" 
+                                    <input type="number" class="games-input" value="${player.season2425 || 0}"
                                            onchange="updateGamesField('${player.name}', 'season2425', this.value)">
                                 </div>
                             </div>
                             <div class="games-row">
                                 <div>
-                                    <label style="font-size: 0.85em;">EAFC 26</label>
-                                    <input type="number" class="games-input" value="${player.eafc26 || 0}" 
-                                           onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
-                                </div>
-                                <div>
                                     <label style="font-size: 0.85em;">Adjustment (+/-)</label>
-                                    <input type="number" class="games-input" value="${player.adjustment || 0}" 
+                                    <input type="number" class="games-input" value="${player.adjustment || 0}"
                                            onchange="updateGamesField('${player.name}', 'adjustment', this.value)">
                                 </div>
+                                <div></div>
                             </div>
                             <div class="games-total">
                                 Total Games: ${total}
@@ -338,6 +414,7 @@
                 player[field] = parseInt(value) || 0;
                 await savePlayers();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             }
         }
 
@@ -413,6 +490,7 @@
                 await setDoc(doc(db, 'config', 'players'), { list: allPlayers });
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
+                updateSettingsPlayersTable();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -427,11 +505,14 @@
         }
 
         function updateAll() {
+            updatePlayerDropdowns();
             updateStats();
             updateHistory();
             updatePlayers();
             updatePlayerStats();
             updateBatonTracker();
+            updateManagePlayersTable();
+            updateSettingsPlayersTable();
             updateFineReasonsTable();
             updateCharts();
             updateSpakkaTab();
@@ -457,41 +538,55 @@
         }
 
         function updatePlayerStats() {
-            const selectedPlayer = document.getElementById('playerSelector').value;
+            const playerSelector = document.getElementById('playerSelector');
             const detailDiv = document.getElementById('playerStatsDetail');
+
+            if (!playerSelector || !detailDiv) return;
+
+            const selectedPlayer = playerSelector.value;
 
             if (selectedPlayer === 'all' || !selectedPlayer) {
                 detailDiv.innerHTML = '';
                 return;
             }
 
-            const playerFines = allFines.filter(f => f.playerName === selectedPlayer);
-            const player = allPlayers.find(p => p.name === selectedPlayer);
-            
+            const playerFines = allFines ? allFines.filter(f => f.playerName === selectedPlayer) : [];
+            const player = allPlayers ? allPlayers.find(p => p.name === selectedPlayer) : null;
+
             if (playerFines.length === 0) {
                 detailDiv.innerHTML = '<div class="empty-state"><p>No fines yet</p></div>';
                 return;
             }
 
-            const totalFines = playerFines.reduce((sum, f) => sum + f.amount, 0);
-            const unpaidFines = playerFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalFines = playerFines.reduce((sum, f) => sum + (f.amount || 0), 0);
+            const unpaidFines = playerFines.filter(f => !f.paid).reduce((sum, f) => sum + (f.amount || 0), 0);
             const totalGames = player ? calculateTotalGames(player) : 0;
             const finesPerGame = totalGames > 0 ? totalFines / totalGames : 0;
-            const avgFine = totalFines / playerFines.length;
-            const worstFine = Math.max(...playerFines.map(f => f.amount));
-            const paymentRate = ((playerFines.filter(f => f.paid).length / playerFines.length) * 100).toFixed(0);
+            const avgFine = playerFines.length > 0 ? totalFines / playerFines.length : 0;
+            const worstFine = playerFines.length > 0 ? Math.max(...playerFines.map(f => f.amount || 0)) : 0;
+            const paymentRate = playerFines.length > 0
+                ? ((playerFines.filter(f => f.paid).length / playerFines.length) * 100).toFixed(0)
+                : 0;
 
             const finesByReason = {};
             playerFines.forEach(f => {
-                finesByReason[f.reason] = (finesByReason[f.reason] || 0) + 1;
+                if (f.reason) {
+                    finesByReason[f.reason] = (finesByReason[f.reason] || 0) + 1;
+                }
             });
-            const mostCommon = Object.entries(finesByReason).sort((a, b) => b[1] - a[1])[0];
+            const mostCommon = Object.keys(finesByReason).length > 0
+                ? Object.entries(finesByReason).sort((a, b) => b[1] - a[1])[0]
+                : null;
 
             const finesByDate = {};
             playerFines.forEach(f => {
-                finesByDate[f.date] = (finesByDate[f.date] || 0) + 1;
+                if (f.date) {
+                    finesByDate[f.date] = (finesByDate[f.date] || 0) + 1;
+                }
             });
-            const mostInDay = Math.max(...Object.values(finesByDate));
+            const mostInDay = Object.keys(finesByDate).length > 0
+                ? Math.max(...Object.values(finesByDate))
+                : 0;
 
             detailDiv.innerHTML = `
                 <div class="card">
@@ -507,7 +602,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">📊 Fines Per Game</div>
-                            <div class="stat-value">£${finesPerGame.toFixed(2)}</div>
+                            <div class="stat-value">£${(finesPerGame || 0).toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">📝 Fine Count</div>
@@ -515,11 +610,11 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">💵 Average Fine</div>
-                            <div class="stat-value">£${avgFine.toFixed(2)}</div>
+                            <div class="stat-value">£${(avgFine || 0).toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">💥 Worst Single Fine</div>
-                            <div class="stat-value">£${worstFine.toFixed(0)}</div>
+                            <div class="stat-value">£${(worstFine || 0).toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">🔥 Most Fines in One Day</div>
@@ -527,7 +622,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">⚠️ Unpaid Balance</div>
-                            <div class="stat-value">£${unpaidFines.toFixed(0)}</div>
+                            <div class="stat-value">£${(unpaidFines || 0).toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">✓ Payment Rate</div>
@@ -709,73 +804,97 @@
         }
 
         function updateBatonTracker() {
-            if (batonHistory.length > 0) {
+            const batonCurrentTeam = document.getElementById('batonCurrentTeam');
+            const batonCurrentDate = document.getElementById('batonCurrentDate');
+
+            if (batonHistory && batonHistory.length > 0) {
                 const latest = batonHistory[0];
-                document.getElementById('batonCurrentTeam').textContent = latest.to;
-                document.getElementById('batonCurrentDate').textContent = `Updated: ${formatDateDDMMYYYY(latest.date)}`;
+                if (batonCurrentTeam) batonCurrentTeam.textContent = latest.to || '-';
+                if (batonCurrentDate) batonCurrentDate.textContent = `Updated: ${formatDateDDMMYYYY(latest.date)}`;
+            } else {
+                if (batonCurrentTeam) batonCurrentTeam.textContent = '-';
+                if (batonCurrentDate) batonCurrentDate.textContent = 'No baton history';
             }
 
             const forfeitTable = document.getElementById('forfeitTable');
+            if (!forfeitTable) return;
 
             const playerStats = {};
             // First, initialize all players
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
+            if (allPlayers && allPlayers.length > 0) {
+                allPlayers.forEach(player => {
+                    playerStats[player.name] = {
+                        total: 0,
+                        games: calculateTotalGames(player)
+                    };
+                });
+            }
+
             // Then add fine totals
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            if (allFines && allFines.length > 0) {
+                allFines.forEach(fine => {
+                    if (playerStats[fine.playerName]) {
+                        playerStats[fine.playerName].total += fine.amount;
+                    }
+                });
+            }
 
-            const leastGames = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, games: stats.games }))
-                .sort((a, b) => a.games - b.games)[0];
+            const statsArray = Object.entries(playerStats);
 
-            const highestTotal = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, total: stats.total }))
-                .sort((a, b) => b.total - a.total)[0];
+            const leastGames = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({ name, games: stats.games }))
+                    .sort((a, b) => a.games - b.games)[0]
+                : null;
 
-            const highestPerGame = Object.entries(playerStats)
-                .map(([name, stats]) => ({ 
-                    name, 
-                    perGame: stats.games > 0 ? stats.total / stats.games : 0 
-                }))
-                .sort((a, b) => b.perGame - a.perGame)[0];
+            const highestTotal = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({ name, total: stats.total }))
+                    .sort((a, b) => b.total - a.total)[0]
+                : null;
+
+            const highestPerGame = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.games > 0 ? stats.total / stats.games : 0
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)[0]
+                : null;
 
             forfeitTable.innerHTML = `
                 <div class="player-card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>🎮 Least Games</span>
-                        <strong>${leastGames?.name || '-'} (${leastGames?.games || 0})</strong>
+                        <strong>${leastGames ? leastGames.name : '-'} (${leastGames ? leastGames.games : 0})</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>💰 Highest Total</span>
-                        <strong>${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</strong>
+                        <strong>${highestTotal ? highestTotal.name : '-'} (£${highestTotal ? highestTotal.total.toFixed(0) : 0})</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span>📊 Highest Per Game</span>
-                        <strong>${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</strong>
+                        <strong>${highestPerGame ? highestPerGame.name : '-'} (£${highestPerGame ? highestPerGame.perGame.toFixed(2) : 0})</strong>
                     </div>
                 </div>
             `;
 
             const historyTable = document.getElementById('batonHistoryTable');
-            historyTable.innerHTML = batonHistory.map(entry => `
-                <tr>
-                    <td>${formatDateDDMMYYYY(entry.date)}</td>
-                    <td>${entry.from}</td>
-                    <td>${entry.score}</td>
-                    <td>${entry.to}</td>
-                    <td>
-                        <button class="btn-small btn-danger" onclick="deleteBatonEntry('${entry.id}')">Del</button>
-                    </td>
-                </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
+            if (historyTable) {
+                historyTable.innerHTML = (batonHistory && batonHistory.length > 0)
+                    ? batonHistory.map(entry => `
+                        <tr>
+                            <td>${formatDateDDMMYYYY(entry.date)}</td>
+                            <td>${entry.from}</td>
+                            <td>${entry.score}</td>
+                            <td>${entry.to}</td>
+                            <td>
+                                <button class="btn-small btn-danger" onclick="deleteBatonEntry('${entry.id}')">Del</button>
+                            </td>
+                        </tr>
+                    `).join('')
+                    : '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
+            }
         }
 
         async function deleteBatonEntry(id) {
@@ -793,9 +912,13 @@
         }
 
         function updateSpakkaTab() {
+            // Check if elements exist (tab might not be loaded yet)
+            const potElement = document.getElementById('spakkaTotalPot');
+            if (!potElement) return;
+
             // Update total pot
             const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
-            document.getElementById('spakkaTotalPot').textContent = `£${totalPot.toFixed(0)}`;
+            potElement.textContent = `£${totalPot.toFixed(0)}`;
 
             // Update unpaid list - show who owes money
             const unpaidByPlayer = {};
@@ -804,19 +927,21 @@
             });
 
             const unpaidList = document.getElementById('spakkaUnpaidList');
-            const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
+            if (unpaidList) {
+                const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
 
-            if (sortedUnpaid.length === 0) {
-                unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #27ae60;">🎉 Everyone has paid!</div>';
-            } else {
-                unpaidList.innerHTML = sortedUnpaid.map(([name, amount]) => `
-                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2em; font-weight: 600; color: #333;">${name}</span>
-                            <span style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">£${amount.toFixed(0)}</span>
+                if (sortedUnpaid.length === 0) {
+                    unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #27ae60;">🎉 Everyone has paid!</div>';
+                } else {
+                    unpaidList.innerHTML = sortedUnpaid.map(([name, amount]) => `
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2em; font-weight: 600; color: #333;">${name}</span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">£${amount.toFixed(0)}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Update top offenders - who has most fines
@@ -826,77 +951,96 @@
             });
 
             const topOffenders = document.getElementById('spakkaTopOffenders');
-            const sortedOffenders = Object.entries(totalsByPlayer).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            if (topOffenders) {
+                const sortedOffenders = Object.entries(totalsByPlayer).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-            if (sortedOffenders.length === 0) {
-                topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No fines yet</div>';
-            } else {
-                const medals = ['🥇', '🥈', '🥉'];
-                topOffenders.innerHTML = sortedOffenders.map(([name, amount], index) => `
-                    <div style="background: ${index === 0 ? '#fff3cd' : '#f9f9f9'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#e0e0e0'};">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2em;">
-                                <span style="font-size: 1.5em; margin-right: 8px;">${medals[index]}</span>
-                                <strong>${name}</strong>
-                            </span>
-                            <span style="font-size: 1.5em; font-weight: bold; color: #1D428A;">£${amount.toFixed(0)}</span>
+                if (sortedOffenders.length === 0) {
+                    topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No fines yet</div>';
+                } else {
+                    const medals = ['🥇', '🥈', '🥉'];
+                    topOffenders.innerHTML = sortedOffenders.map(([name, amount], index) => `
+                        <div style="background: ${index === 0 ? '#fff3cd' : '#f9f9f9'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#e0e0e0'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2em;">
+                                    <span style="font-size: 1.5em; margin-right: 8px;">${medals[index]}</span>
+                                    <strong>${name}</strong>
+                                </span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #1D428A;">£${amount.toFixed(0)}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Update baton holder
-            if (batonHistory.length > 0) {
-                const latest = batonHistory[0];
-                document.getElementById('spakkaBatonHolder').textContent = latest.to;
-            } else {
-                document.getElementById('spakkaBatonHolder').textContent = '-';
+            const batonHolderElement = document.getElementById('spakkaBatonHolder');
+            if (batonHolderElement) {
+                if (batonHistory && batonHistory.length > 0) {
+                    const latest = batonHistory[0];
+                    batonHolderElement.textContent = latest.to || '-';
+                } else {
+                    batonHolderElement.textContent = '-';
+                }
             }
 
-            // Update forfeits (who drinks next)
+            // Update forfeits (Current Forfeits Holders)
             const playerStats = {};
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            if (allPlayers && allPlayers.length > 0) {
+                allPlayers.forEach(player => {
+                    playerStats[player.name] = {
+                        total: 0,
+                        games: calculateTotalGames(player)
+                    };
+                });
+                allFines.forEach(fine => {
+                    if (playerStats[fine.playerName]) {
+                        playerStats[fine.playerName].total += fine.amount;
+                    }
+                });
+            }
 
-            const leastGames = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, games: stats.games }))
-                .sort((a, b) => a.games - b.games)[0];
+            const leastGames = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({ name, games: stats.games }))
+                    .sort((a, b) => a.games - b.games)[0]
+                : null;
 
-            const highestTotal = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, total: stats.total }))
-                .sort((a, b) => b.total - a.total)[0];
+            const highestTotal = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({ name, total: stats.total }))
+                    .sort((a, b) => b.total - a.total)[0]
+                : null;
 
-            const highestPerGame = Object.entries(playerStats)
-                .map(([name, stats]) => ({
-                    name,
-                    perGame: stats.games > 0 ? stats.total / stats.games : 0
-                }))
-                .sort((a, b) => b.perGame - a.perGame)[0];
+            const highestPerGame = Object.keys(playerStats).length > 0
+                ? Object.entries(playerStats)
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.games > 0 ? stats.total / stats.games : 0
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)[0]
+                : null;
 
             const forfeitsDiv = document.getElementById('spakkaForfeits');
-            forfeitsDiv.innerHTML = `
-                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #27ae60;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Least Games</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
-                </div>
-                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Most Fines Total</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
-                </div>
-                <div style="background: #ffe5e5; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
-                    <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Worst Per Game</div>
-                    <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
-                </div>
-            `;
+            if (forfeitsDiv) {
+                if (Object.keys(playerStats).length === 0) {
+                    forfeitsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No player data yet</div>';
+                } else {
+                    forfeitsDiv.innerHTML = `
+                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #27ae60;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Least Games</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
+                        </div>
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Most Fines Total</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
+                        </div>
+                        <div style="background: #ffe5e5; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Worst Per Game</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
+                        </div>
+                    `;
+                }
+            }
         }
 
         function togglePaid(id, paid) {
@@ -1198,18 +1342,26 @@
 
         function formatDateToISO(dateStr) {
             if (!dateStr) return null;
-            
-            const date = new Date(dateStr);
-            if (!isNaN(date.getTime())) {
-                return date.toISOString().split('T')[0];
-            }
-            
+
+            // First try to parse DD/MM/YYYY format (UK format)
             const parts = dateStr.split('/');
             if (parts.length === 3) {
                 const [day, month, year] = parts;
-                return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                // Validate it's actually a date
+                const d = parseInt(day);
+                const m = parseInt(month);
+                const y = parseInt(year);
+                if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1900) {
+                    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
             }
-            
+
+            // Fallback: try ISO format (YYYY-MM-DD)
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return dateStr;
+            }
+
+            // Last resort: return today's date
             return new Date().toISOString().split('T')[0];
         }
 
@@ -1419,65 +1571,90 @@
             const ctx = document.getElementById('perGameChart');
             if (!ctx) return;
 
+            if (!allPlayers || allPlayers.length === 0) {
+                console.log('No players data for per game chart');
+                return;
+            }
+
             const playerStats = {};
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            try {
+                allPlayers.forEach(player => {
+                    if (player && player.name) {
+                        playerStats[player.name] = {
+                            total: 0,
+                            games: calculateTotalGames(player)
+                        };
+                    }
+                });
 
-            const perGameData = Object.entries(playerStats)
-                .filter(([, stats]) => stats.games > 0)
-                .map(([name, stats]) => ({
-                    name,
-                    perGame: stats.total / stats.games
-                }))
-                .sort((a, b) => b.perGame - a.perGame)
-                .slice(0, 10);
-
-            if (charts.perGame) charts.perGame.destroy();
-            charts.perGame = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: perGameData.map(p => p.name),
-                    datasets: [{
-                        label: 'Fines Per Game (£)',
-                        data: perGameData.map(p => p.perGame),
-                        backgroundColor: '#FFCD00',
-                        borderColor: '#1D428A',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        title: {
-                            display: true,
-                            text: 'Top 10 Players by Fines Per Game',
-                            color: '#1D428A',
-                            font: { size: 14, weight: 'bold' }
+                if (allFines && allFines.length > 0) {
+                    allFines.forEach(fine => {
+                        if (fine && playerStats[fine.playerName]) {
+                            playerStats[fine.playerName].total += (fine.amount || 0);
                         }
+                    });
+                }
+
+                const perGameData = Object.entries(playerStats)
+                    .filter(([, stats]) => stats && stats.games > 0)
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.total / stats.games
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)
+                    .slice(0, 10);
+
+                if (perGameData.length === 0) {
+                    console.log('No per game data to display');
+                    return;
+                }
+
+                if (charts.perGame) charts.perGame.destroy();
+                charts.perGame = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: perGameData.map(p => p.name || ''),
+                        datasets: [{
+                            label: 'Fines Per Game (£)',
+                            data: perGameData.map(p => p.perGame || 0),
+                            backgroundColor: '#FFCD00',
+                            borderColor: '#1D428A',
+                            borderWidth: 2
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return '£' + value.toFixed(2);
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Top 10 Players by Fines Per Game',
+                                color: '#1D428A',
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '£' + (value || 0).toFixed(2);
+                                    },
+                                    font: { size: 11 }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: { size: 11 }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+            } catch (error) {
+                console.error('Error updating per game chart:', error);
+            }
         }
 
         function updateFineTypesChart() {
