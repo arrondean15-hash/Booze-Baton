@@ -81,6 +81,7 @@
         window.applyFilters = applyFilters;
         window.setDateFilter = setDateFilter;
         window.refreshHistory = refreshHistory;
+        window.analyzeFineType = analyzeFineType;
         window.addNewFineReason = addNewFineReason;
         window.editFineReason = editFineReason;
         window.deleteFineReason = deleteFineReason;
@@ -2139,6 +2140,7 @@
             updateFineTypesChart();
             updatePaymentChart();
             updateTrendsChart();
+            populateFineTypeAnalysisSelector();
         }
 
         function updatePlayerFinesChart() {
@@ -2442,6 +2444,174 @@
                     }
                 }
             });
+        }
+
+        // FINE-SPECIFIC ANALYSIS FUNCTIONS
+        function populateFineTypeAnalysisSelector() {
+            const selector = document.getElementById('fineTypeAnalysisSelector');
+            if (!selector) return;
+
+            // Get unique fine types from all fines
+            const fineTypes = new Set();
+            allFines.forEach(fine => {
+                if (fine && fine.reason) {
+                    fineTypes.add(fine.reason);
+                }
+            });
+
+            // Sort alphabetically
+            const sortedFineTypes = Array.from(fineTypes).sort();
+
+            // Keep the current selection if it exists
+            const currentSelection = selector.value;
+
+            // Rebuild options
+            selector.innerHTML = '<option value="">-- Choose a fine type --</option>' +
+                sortedFineTypes.map(fineType =>
+                    `<option value="${fineType}">${fineType}</option>`
+                ).join('');
+
+            // Restore selection if it still exists
+            if (currentSelection && sortedFineTypes.includes(currentSelection)) {
+                selector.value = currentSelection;
+            }
+        }
+
+        function analyzeFineType() {
+            const selector = document.getElementById('fineTypeAnalysisSelector');
+            const content = document.getElementById('fineTypeAnalysisContent');
+
+            if (!selector || !content) return;
+
+            const selectedFineType = selector.value;
+
+            if (!selectedFineType) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <div style="font-size: 3em; margin-bottom: 10px;">🔍</div>
+                        <p>Select a fine type to see detailed breakdown</p>
+                    </div>`;
+                return;
+            }
+
+            // Filter fines by selected type
+            const finesOfType = allFines.filter(f => f.reason === selectedFineType);
+
+            if (finesOfType.length === 0) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <p>No fines found for this type</p>
+                    </div>`;
+                return;
+            }
+
+            // Calculate statistics by player
+            const playerStats = {};
+            finesOfType.forEach(fine => {
+                if (!playerStats[fine.playerName]) {
+                    playerStats[fine.playerName] = {
+                        count: 0,
+                        totalAmount: 0,
+                        paidCount: 0,
+                        paidAmount: 0,
+                        unpaidCount: 0,
+                        unpaidAmount: 0
+                    };
+                }
+
+                const stats = playerStats[fine.playerName];
+                stats.count++;
+                stats.totalAmount += fine.amount;
+
+                if (fine.paid) {
+                    stats.paidCount++;
+                    stats.paidAmount += fine.amount;
+                } else {
+                    stats.unpaidCount++;
+                    stats.unpaidAmount += fine.amount;
+                }
+            });
+
+            // Sort by total count descending
+            const sortedPlayers = Object.entries(playerStats)
+                .sort((a, b) => b[1].count - a[1].count);
+
+            // Overall statistics
+            const totalCount = finesOfType.length;
+            const totalAmount = finesOfType.reduce((sum, f) => sum + f.amount, 0);
+            const paidCount = finesOfType.filter(f => f.paid).length;
+            const paidAmount = finesOfType.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaidCount = totalCount - paidCount;
+            const unpaidAmount = totalAmount - paidAmount;
+
+            // Build HTML
+            content.innerHTML = `
+                <div style="margin-bottom: 20px; padding: 15px; background: linear-gradient(135deg, #1D428A 0%, #0f2454 100%); border-radius: 8px; color: white;">
+                    <div style="font-size: 1.2em; font-weight: 600; margin-bottom: 10px;">${selectedFineType}</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 0.9em;">
+                        <div>
+                            <div style="opacity: 0.8;">Total Occurrences:</div>
+                            <div style="font-size: 1.3em; font-weight: 600;">${totalCount}</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Total Amount:</div>
+                            <div style="font-size: 1.3em; font-weight: 600;">£${totalAmount.toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Paid:</div>
+                            <div style="font-size: 1.3em; font-weight: 600; color: #90EE90;">${paidCount} (£${paidAmount.toFixed(2)})</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Unpaid:</div>
+                            <div style="font-size: 1.3em; font-weight: 600; color: #FFB6C1;">${unpaidCount} (£${unpaidAmount.toFixed(2)})</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 10px; color: #1D428A;">Breakdown by Player:</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th>Count</th>
+                                <th>Total £</th>
+                                <th>Paid</th>
+                                <th>Unpaid</th>
+                                <th>Payment %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sortedPlayers.map(([playerName, stats], index) => {
+                                const paymentPercentage = stats.count > 0 ? ((stats.paidCount / stats.count) * 100).toFixed(0) : 0;
+                                const medals = ['🥇', '🥈', '🥉'];
+                                const rank = index < 3 ? medals[index] : `${index + 1}`;
+
+                                return `
+                                    <tr>
+                                        <td style="text-align: center; font-size: 1.2em;">${rank}</td>
+                                        <td style="font-weight: 600;">${playerName}</td>
+                                        <td style="text-align: center; font-weight: 600;">${stats.count}</td>
+                                        <td style="text-align: right;">£${stats.totalAmount.toFixed(2)}</td>
+                                        <td style="text-align: center; color: #00843D;">
+                                            ${stats.paidCount} (£${stats.paidAmount.toFixed(2)})
+                                        </td>
+                                        <td style="text-align: center; color: #C8102E;">
+                                            ${stats.unpaidCount} (£${stats.unpaidAmount.toFixed(2)})
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <span style="display: inline-block; background: ${paymentPercentage == 100 ? '#00843D' : paymentPercentage >= 50 ? '#FFA500' : '#C8102E'}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: 600;">
+                                                ${paymentPercentage}%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         init();

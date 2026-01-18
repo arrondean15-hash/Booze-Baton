@@ -3162,6 +3162,17 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                     <canvas id="trendsChart"></canvas>
                 </div>
             </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">🔍 Fine-Specific Analysis</h3>
+                <div style="margin-bottom: 15px;">
+                    <label style="font-weight: 600; margin-bottom: 8px; display: block; color: #666;">Select Fine Type:</label>
+                    <select id="fineTypeAnalysisSelector" onchange="analyzeFineType()" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 1em;">
+                        <option value="">-- Choose a fine type --</option>
+                    </select>
+                </div>
+                <div id="fineTypeAnalysisContent"></div>
+            </div>
         </div>
 
         <!-- History Tab -->
