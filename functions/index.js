@@ -4,8 +4,8 @@ const fetch = require('node-fetch');
 // API-Football configuration
 // Get API key from environment variable
 const API_KEY = functions.config().football?.apikey || process.env.FOOTBALL_API_KEY;
-const API_HOST = 'api-football-v3.p.rapidapi.com';
-const API_BASE_URL = `https://${API_HOST}/`;
+// Direct API-Football endpoint (not RapidAPI)
+const API_BASE_URL = 'https://v3.football.api-sports.io/';
 
 // Admin PIN configuration
 // Set with: firebase functions:config:set admin.pin="YOUR_PIN"
@@ -32,8 +32,7 @@ async function callFootballAPI(endpoint, params = {}) {
 
   const response = await fetch(url, {
     headers: {
-      'X-RapidAPI-Key': API_KEY,
-      'X-RapidAPI-Host': API_HOST
+      'x-apisports-key': API_KEY
     }
   });
 
