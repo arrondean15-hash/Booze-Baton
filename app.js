@@ -62,6 +62,44 @@
         let activeListenerCount = 0; // Track active snapshot listeners
         const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
+        // CANONICAL DATASET SELECTOR FOR ANALYTICS
+        // Single source of truth: returns full history if loaded, else recent 200
+        // This ensures all stats/charts/leaderboards use the most complete data available
+        function getFinesForAnalytics() {
+            return (Array.isArray(cachedFullFines) && cachedFullFines.length > 0)
+                ? cachedFullFines
+                : allFines; // fallback to bounded realtime (recent 200)
+        }
+
+        // Get scope indicator text for UI
+        function getAnalyticsScopeText() {
+            if (cachedFullFines.length > 0) {
+                const time = lastHistoryFetch ? lastHistoryFetch.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+                return `Stats scope: Full history (${cachedFullFines.length} fines, refreshed ${time})`;
+            }
+            return `Stats scope: Recent ${allFines.length} fines (refresh history for full stats)`;
+        }
+
+        // Update scope indicators in UI
+        function updateScopeIndicators() {
+            const scopeText = getAnalyticsScopeText();
+            const statsIndicator = document.getElementById('statsScopeIndicator');
+            const chartsIndicator = document.getElementById('chartsScopeIndicator');
+
+            if (statsIndicator) {
+                const isFullHistory = cachedFullFines.length > 0;
+                statsIndicator.textContent = scopeText;
+                statsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                statsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
+            }
+            if (chartsIndicator) {
+                const isFullHistory = cachedFullFines.length > 0;
+                chartsIndicator.textContent = scopeText;
+                chartsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                chartsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
+            }
+        }
+
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
         window.deleteFine = deleteFine;
@@ -309,6 +347,27 @@
                     allFines.push({ id: d.id, ...d.data() });
                 });
                 console.log(`📊 Fines snapshot: ${allFines.length} recent fines loaded`);
+
+                // MERGE: If cachedFullFines loaded, update it with new/changed docs
+                if (cachedFullFines.length > 0) {
+                    snapshot.forEach((d) => {
+                        const newDoc = { id: d.id, ...d.data() };
+                        const existingIndex = cachedFullFines.findIndex(f => f.id === newDoc.id);
+                        if (existingIndex >= 0) {
+                            cachedFullFines[existingIndex] = newDoc; // Update existing
+                        } else {
+                            cachedFullFines.unshift(newDoc); // Add new at start
+                        }
+                    });
+                    // Re-sort by timestamp desc
+                    cachedFullFines.sort((a, b) => {
+                        const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime();
+                        const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime();
+                        return timeB - timeA;
+                    });
+                    console.log(`🔄 Merged realtime updates into cachedFullFines (${cachedFullFines.length} total)`);
+                }
+
                 updateAll(); // NOTE: updateAll() does NOT update History anymore
             });
             activeListenerCount++;
@@ -648,27 +707,30 @@
             updateFineReasonsTable();
             updateCharts();
             updateSpakkaTab();
-            document.getElementById('totalRecords').textContent = allFines.length;
+            const fines = getFinesForAnalytics();
+            document.getElementById('totalRecords').textContent = fines.length;
         }
 
         function updateStats() {
-            const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, fine) => sum + fine.amount, 0);
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const totalPot = fines.reduce((sum, fine) => sum + fine.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, fine) => sum + fine.amount, 0);
 
             document.getElementById('totalPot').textContent = `£${totalPot.toFixed(0)}`;
             document.getElementById('totalUnpaid').textContent = `£${totalUnpaid.toFixed(0)}`;
-            document.getElementById('totalFines').textContent = allFines.length;
+            document.getElementById('totalFines').textContent = fines.length;
             document.getElementById('batonTotalPot').textContent = `£${totalPot.toFixed(0)}`;
 
             const playerTotals = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
             });
-            
+
             const worstOffender = Object.entries(playerTotals).sort((a, b) => b[1] - a[1])[0];
             document.getElementById('worstOffender').textContent = worstOffender ? worstOffender[0] : '-';
 
             updateLeaderboards();
+            updateScopeIndicators(); // Update scope labels
         }
 
         function updatePlayerStats() {
@@ -684,7 +746,8 @@
                 return;
             }
 
-            const playerFines = allFines ? allFines.filter(f => f.playerName === selectedPlayer) : [];
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const playerFines = fines ? fines.filter(f => f.playerName === selectedPlayer) : [];
             const player = allPlayers ? allPlayers.find(p => p.name === selectedPlayer) : null;
 
             if (playerFines.length === 0) {
@@ -905,6 +968,7 @@
                 // Update the UI
                 updateHistory();
                 applyFilters(); // Re-apply any active filters
+                updateAll(); // CRITICAL: Recompute all stats/charts with full dataset
 
                 return true;
             } catch (error) {
@@ -994,14 +1058,15 @@
 
         function updatePlayers() {
             const playersContent = document.getElementById('playersContent');
-            
-            if (allFines.length === 0) {
+
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 playersContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><p>No players yet</p></div>';
                 return;
             }
 
             const playerStats = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 if (!playerStats[fine.playerName]) {
                     playerStats[fine.playerName] = {
                         total: 0,
@@ -1015,7 +1080,7 @@
                     playerStats[fine.playerName].unpaid += fine.amount;
                 }
                 playerStats[fine.playerName].count += 1;
-                playerStats[fine.playerName].reasons[fine.reason] = 
+                playerStats[fine.playerName].reasons[fine.reason] =
                     (playerStats[fine.playerName].reasons[fine.reason] || 0) + 1;
             });
 
@@ -1077,6 +1142,7 @@
             const forfeitTable = document.getElementById('forfeitTable');
             if (!forfeitTable) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerStats = {};
             // First, initialize all players
             if (allPlayers && allPlayers.length > 0) {
@@ -1089,8 +1155,8 @@
             }
 
             // Then add fine totals
-            if (allFines && allFines.length > 0) {
-                allFines.forEach(fine => {
+            if (fines && fines.length > 0) {
+                fines.forEach(fine => {
                     if (playerStats[fine.playerName]) {
                         playerStats[fine.playerName].total += fine.amount;
                     }
@@ -1176,13 +1242,15 @@
             const potElement = document.getElementById('spakkaTotalPot');
             if (!potElement) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+
             // Update total pot
-            const totalPot = allFines.reduce((sum, fine) => sum + fine.amount, 0);
+            const totalPot = fines.reduce((sum, fine) => sum + fine.amount, 0);
             potElement.textContent = `£${totalPot.toFixed(0)}`;
 
             // Update unpaid list - show who owes money
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1206,7 +1274,7 @@
 
             // Update top offenders - who has most fines
             const totalsByPlayer = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 totalsByPlayer[fine.playerName] = (totalsByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1252,7 +1320,7 @@
                         games: calculateTotalGames(player)
                     };
                 });
-                allFines.forEach(fine => {
+                fines.forEach(fine => {
                     if (playerStats[fine.playerName]) {
                         playerStats[fine.playerName].total += fine.amount;
                     }
@@ -1427,8 +1495,9 @@
         }
 
         function copyUnpaidList() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1454,8 +1523,9 @@
         }
 
         function copyPaymentReminder() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1483,10 +1553,12 @@
         }
 
         function updateLeaderboards() {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+
             // Hall of Shame - Top 5 by total fines
             const playerTotals = {};
-            if (allFines && allFines.length > 0) {
-                allFines.forEach(fine => {
+            if (fines && fines.length > 0) {
+                fines.forEach(fine => {
                     if (fine && fine.playerName && fine.amount) {
                         playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                     }
@@ -1517,7 +1589,7 @@
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
             const recentPayments = {};
-            allFines.filter(f => f.paid && f.paidDate).forEach(fine => {
+            fines.filter(f => f.paid && f.paidDate).forEach(fine => {
                 const paidDate = new Date(fine.paidDate);
                 if (paidDate >= thirtyDaysAgo) {
                     recentPayments[fine.playerName] = (recentPayments[fine.playerName] || 0) + fine.amount;
@@ -1545,12 +1617,12 @@
 
             // Clean Record - Zero unpaid, sorted by total paid
             const unpaidByPlayer = {};
-            allFines.filter(f => !f.paid).forEach(fine => {
+            fines.filter(f => !f.paid).forEach(fine => {
                 unpaidByPlayer[fine.playerName] = (unpaidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
             const paidByPlayer = {};
-            allFines.filter(f => f.paid).forEach(fine => {
+            fines.filter(f => f.paid).forEach(fine => {
                 paidByPlayer[fine.playerName] = (paidByPlayer[fine.playerName] || 0) + fine.amount;
             });
 
@@ -1584,9 +1656,10 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Calculate per-game fine rate for each player
             const playerStats = allPlayers.map(player => {
-                const playerFines = allFines.filter(f => f.playerName === player.name);
+                const playerFines = fines.filter(f => f.playerName === player.name);
                 const totalFines = playerFines.reduce((sum, f) => sum + f.amount, 0);
                 const totalGames = calculateTotalGames(player);
                 const finesPerGame = totalGames > 0 ? totalFines / totalGames : 0;
@@ -1655,14 +1728,15 @@
         }
 
         function exportData() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 alert('No data to export');
                 return;
             }
 
             const csv = [
                 ['Name', 'Date', 'Fine', 'Amount', 'Paid'],
-                ...allFines.map(f => [
+                ...fines.map(f => [
                     f.playerName,
                     f.date,
                     f.reason,
@@ -1680,7 +1754,8 @@
         }
 
         function exportPDF() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 showToast('No data to export', 'error');
                 return;
             }
@@ -1699,8 +1774,8 @@
             doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 105, 28, { align: 'center' });
 
             // Overall Stats
-            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPot = fines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
             const totalPaid = totalPot - totalUnpaid;
 
             doc.setFontSize(14);
@@ -1708,7 +1783,7 @@
             doc.text('Season Statistics', 20, 40);
 
             doc.setFontSize(11);
-            doc.text(`Total Fines: ${allFines.length}`, 20, 48);
+            doc.text(`Total Fines: ${fines.length}`, 20, 48);
             doc.text(`Total Pot: £${totalPot.toFixed(2)}`, 20, 54);
             doc.text(`Paid: £${totalPaid.toFixed(2)}`, 20, 60);
             doc.text(`Unpaid: £${totalUnpaid.toFixed(2)}`, 20, 66);
@@ -1716,7 +1791,7 @@
             // Player Breakdown
             const playerTotals = {};
             const playerUnpaid = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                 if (!fine.paid) {
                     playerUnpaid[fine.playerName] = (playerUnpaid[fine.playerName] || 0) + fine.amount;
@@ -1758,13 +1833,14 @@
         }
 
         function exportWhatsApp() {
-            if (allFines.length === 0) {
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) {
                 showToast('No data to export', 'error');
                 return;
             }
 
-            const totalPot = allFines.reduce((sum, f) => sum + f.amount, 0);
-            const totalUnpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalPot = fines.reduce((sum, f) => sum + f.amount, 0);
+            const totalUnpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
             const totalPaid = totalPot - totalUnpaid;
 
             // Calculate player stats
@@ -1772,7 +1848,7 @@
             const playerUnpaid = {};
             const playerFineCount = {};
 
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
                 playerFineCount[fine.playerName] = (playerFineCount[fine.playerName] || 0) + 1;
                 if (!fine.paid) {
@@ -1789,7 +1865,7 @@
             message += `📅 ${new Date().toLocaleDateString('en-GB')}\n\n`;
 
             message += `📊 *SEASON STATS*\n`;
-            message += `Total Fines: ${allFines.length}\n`;
+            message += `Total Fines: ${fines.length}\n`;
             message += `💰 Total Pot: £${totalPot.toFixed(2)}\n`;
             message += `✅ Paid: £${totalPaid.toFixed(2)}\n`;
             message += `⚠️ Unpaid: £${totalUnpaid.toFixed(2)}\n\n`;
@@ -2133,7 +2209,8 @@
         };
 
         function updateCharts() {
-            if (allFines.length === 0) return;
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            if (fines.length === 0) return;
 
             updatePlayerFinesChart();
             updatePerGameChart();
@@ -2147,8 +2224,9 @@
             const ctx = document.getElementById('playerFinesChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerTotals = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 playerTotals[fine.playerName] = (playerTotals[fine.playerName] || 0) + fine.amount;
             });
 
@@ -2210,6 +2288,7 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const playerStats = {};
             try {
                 allPlayers.forEach(player => {
@@ -2221,8 +2300,8 @@
                     }
                 });
 
-                if (allFines && allFines.length > 0) {
-                    allFines.forEach(fine => {
+                if (fines && fines.length > 0) {
+                    fines.forEach(fine => {
                         if (fine && playerStats[fine.playerName]) {
                             playerStats[fine.playerName].total += (fine.amount || 0);
                         }
@@ -2295,8 +2374,9 @@
             const ctx = document.getElementById('fineTypesChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const fineTypeCounts = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 fineTypeCounts[fine.reason] = (fineTypeCounts[fine.reason] || 0) + 1;
             });
 
@@ -2345,8 +2425,9 @@
             const ctx = document.getElementById('paymentChart');
             if (!ctx) return;
 
-            const paid = allFines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
-            const unpaid = allFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const fines = getFinesForAnalytics(); // Use canonical dataset
+            const paid = fines.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaid = fines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
 
             if (charts.payment) charts.payment.destroy();
             charts.payment = new Chart(ctx, {
@@ -2385,8 +2466,9 @@
             const ctx = document.getElementById('trendsChart');
             if (!ctx) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             const finesByMonth = {};
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 const date = new Date(fine.date);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 finesByMonth[monthKey] = (finesByMonth[monthKey] || 0) + fine.amount;
@@ -2451,9 +2533,10 @@
             const selector = document.getElementById('fineTypeAnalysisSelector');
             if (!selector) return;
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Get unique fine types from all fines
             const fineTypes = new Set();
-            allFines.forEach(fine => {
+            fines.forEach(fine => {
                 if (fine && fine.reason) {
                     fineTypes.add(fine.reason);
                 }
@@ -2494,8 +2577,9 @@
                 return;
             }
 
+            const fines = getFinesForAnalytics(); // Use canonical dataset
             // Filter fines by selected type
-            const finesOfType = allFines.filter(f => f.reason === selectedFineType);
+            const finesOfType = fines.filter(f => f.reason === selectedFineType);
 
             if (finesOfType.length === 0) {
                 content.innerHTML = `
