@@ -1,5 +1,5 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -42,11 +42,25 @@
             { reason: "25% Late Fine Increase", amount: 2.00 }
         ];
 
-        let allFines = [];
+        let allFines = []; // Recent fines (limited to 200) - for realtime updates
         let allPlayers = [];
         let batonHistory = [];
         let currentPaidFineId = null;
         let currentDateRangeFilter = 'all';
+
+        // FIRESTORE PERFORMANCE OPTIMIZATION
+        // To prevent excessive reads (~89K/day on free tier), we:
+        // 1. Limit realtime listeners to recent data only (200 fines, 50 baton)
+        // 2. Store unsubscribe functions to prevent listener stacking
+        // 3. Use cached full history with manual refresh for History tab
+        // 4. Support ?dev=1 URL param to disable listeners during testing
+        let finesUnsubscribe = null;
+        let batonUnsubscribe = null;
+        let cachedFullFines = []; // Full history for History tab - loaded manually
+        let lastHistoryFetch = null;
+        let didInit = false; // Prevent multiple init() calls
+        let activeListenerCount = 0; // Track active snapshot listeners
+        const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
         window.switchTab = switchTab;
         window.updateAmount = updateAmount;
@@ -66,6 +80,8 @@
         window.updatePlayerStats = updatePlayerStats;
         window.applyFilters = applyFilters;
         window.setDateFilter = setDateFilter;
+        window.refreshHistory = refreshHistory;
+        window.analyzeFineType = analyzeFineType;
         window.addNewFineReason = addNewFineReason;
         window.editFineReason = editFineReason;
         window.deleteFineReason = deleteFineReason;
@@ -93,7 +109,17 @@
         }
 
         function init() {
+            // Prevent multiple initialization
+            if (didInit) {
+                console.warn('⚠️ init() already called, skipping duplicate initialization');
+                return;
+            }
+            didInit = true;
+
             console.log('🚀 Initializing Booze Baton Tracker...');
+            if (isDevMode) {
+                console.warn('🔧 DEV MODE: Realtime listeners disabled. Use ?dev=1 to avoid Firestore read spikes during testing.');
+            }
             checkNetworkStatus();
             console.log('📋 Fine reasons count:', fineReasons.length);
             populateFineReasons();
@@ -246,24 +272,105 @@
         }
 
         function setupRealtimeListeners() {
-            const finesQuery = query(collection(db, 'fines'), orderBy('timestamp', 'desc'));
-            onSnapshot(finesQuery, (snapshot) => {
+            // DEV MODE SAFETY: If ?dev=1 is in URL, use one-time fetch instead of realtime listeners
+            // This prevents Firestore read spikes during development/testing on live URL
+            if (isDevMode) {
+                console.log('🔧 DEV MODE: Using one-time getDocs() instead of realtime listeners');
+                fetchRecentDataOnce();
+                return;
+            }
+
+            // UNSUBSCRIBE OLD LISTENERS FIRST to prevent stacking
+            // This is critical when page is refreshed or init() called multiple times
+            if (finesUnsubscribe) {
+                console.log('📡 Unsubscribing old fines listener');
+                finesUnsubscribe();
+                activeListenerCount--;
+            }
+            if (batonUnsubscribe) {
+                console.log('📡 Unsubscribing old baton listener');
+                batonUnsubscribe();
+                activeListenerCount--;
+            }
+
+            // FINES LISTENER - BOUNDED to most recent 200
+            // This powers: Stats, Recent Activity, Leaderboards, Charts
+            // History tab uses separate cached data with manual refresh
+            const finesQuery = query(
+                collection(db, 'fines'),
+                orderBy('timestamp', 'desc'),
+                limit(200) // CRITICAL: Prevents reading all ~800 fines on every change
+            );
+
+            console.log('📡 Attaching BOUNDED fines listener (limit 200)');
+            finesUnsubscribe = onSnapshot(finesQuery, (snapshot) => {
                 allFines = [];
                 snapshot.forEach((d) => {
                     allFines.push({ id: d.id, ...d.data() });
                 });
-                updateAll();
+                console.log(`📊 Fines snapshot: ${allFines.length} recent fines loaded`);
+                updateAll(); // NOTE: updateAll() does NOT update History anymore
             });
+            activeListenerCount++;
 
-            const batonQuery = query(collection(db, 'baton'), orderBy('timestamp', 'desc'));
-            onSnapshot(batonQuery, (snapshot) => {
+            // BATON LISTENER - BOUNDED to most recent 50
+            const batonQuery = query(
+                collection(db, 'baton'),
+                orderBy('timestamp', 'desc'),
+                limit(50) // CRITICAL: Prevents reading entire baton history
+            );
+
+            console.log('📡 Attaching BOUNDED baton listener (limit 50)');
+            batonUnsubscribe = onSnapshot(batonQuery, (snapshot) => {
                 batonHistory = [];
                 snapshot.forEach((d) => {
                     batonHistory.push({ id: d.id, ...d.data() });
                 });
+                console.log(`🍺 Baton snapshot: ${batonHistory.length} baton entries loaded`);
                 updateBatonTracker();
                 updateSpakkaTab();
             });
+            activeListenerCount++;
+
+            console.log(`✅ Active snapshot listeners: ${activeListenerCount}`);
+        }
+
+        // DEV MODE HELPER: One-time fetch instead of realtime listeners
+        async function fetchRecentDataOnce() {
+            try {
+                // Fetch recent 200 fines
+                const finesQuery = query(
+                    collection(db, 'fines'),
+                    orderBy('timestamp', 'desc'),
+                    limit(200)
+                );
+                const finesSnapshot = await getDocs(finesQuery);
+                allFines = [];
+                finesSnapshot.forEach((d) => {
+                    allFines.push({ id: d.id, ...d.data() });
+                });
+                console.log(`📊 DEV MODE: Loaded ${allFines.length} recent fines (one-time)`);
+
+                // Fetch recent 50 baton entries
+                const batonQuery = query(
+                    collection(db, 'baton'),
+                    orderBy('timestamp', 'desc'),
+                    limit(50)
+                );
+                const batonSnapshot = await getDocs(batonQuery);
+                batonHistory = [];
+                batonSnapshot.forEach((d) => {
+                    batonHistory.push({ id: d.id, ...d.data() });
+                });
+                console.log(`🍺 DEV MODE: Loaded ${batonHistory.length} baton entries (one-time)`);
+
+                // Update UI once
+                updateAll();
+                updateBatonTracker();
+                updateSpakkaTab();
+            } catch (error) {
+                console.error('❌ DEV MODE: Error fetching data:', error);
+            }
         }
 
         async function loadPlayers() {
@@ -531,7 +638,8 @@
         function updateAll() {
             updatePlayerDropdowns();
             updateStats();
-            updateHistory();
+            // NOTE: updateHistory() REMOVED from here to prevent excessive re-renders
+            // History now uses cached data with manual refresh only
             updatePlayers();
             updatePlayerStats();
             updateBatonTracker();
@@ -773,16 +881,77 @@
             });
         }
 
+        // FULL HISTORY LOADER - Manual refresh only
+        // Loads ALL fines from Firestore (expensive operation)
+        // This is separate from realtime listener to control costs
+        async function fetchFullHistory() {
+            try {
+                console.log('📜 Fetching FULL history from Firestore...');
+                const historyQuery = query(
+                    collection(db, 'fines'),
+                    orderBy('timestamp', 'desc')
+                    // NO LIMIT - loads all ~800 fines
+                );
+
+                const snapshot = await getDocs(historyQuery);
+                cachedFullFines = [];
+                snapshot.forEach((d) => {
+                    cachedFullFines.push({ id: d.id, ...d.data() });
+                });
+
+                lastHistoryFetch = new Date();
+                console.log(`✅ Full history loaded: ${cachedFullFines.length} fines (${lastHistoryFetch.toLocaleTimeString()})`);
+
+                // Update the UI
+                updateHistory();
+                applyFilters(); // Re-apply any active filters
+
+                return true;
+            } catch (error) {
+                console.error('❌ Error fetching full history:', error);
+                showToast('Failed to load history', 'error');
+                return false;
+            }
+        }
+
+        // REFRESH HISTORY BUTTON HANDLER
+        async function refreshHistory() {
+            const refreshBtn = document.getElementById('refreshHistoryBtn');
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = '⏳ Refreshing...';
+            }
+
+            const success = await fetchFullHistory();
+
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Refresh History';
+            }
+
+            if (success) {
+                showToast(`History refreshed: ${cachedFullFines.length} fines loaded`, 'success');
+            }
+        }
+
         function updateHistory() {
             const historyContent = document.getElementById('historyContent');
-            
-            if (allFines.length === 0) {
-                historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p>No fines yet</p></div>';
+
+            // Use cachedFullFines (from manual refresh) instead of allFines (realtime limited data)
+            const finesData = cachedFullFines.length > 0 ? cachedFullFines : [];
+
+            if (finesData.length === 0) {
+                historyContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>History not loaded yet</p>
+                        <p style="font-size: 0.9em; color: #666; margin-top: 10px;">Click "Refresh History" button above to load all fines</p>
+                    </div>`;
                 return;
             }
 
             // Sort by date descending (most recent first)
-            const sortedFines = [...allFines].sort((a, b) => new Date(b.date) - new Date(a.date));
+            const sortedFines = [...finesData].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             historyContent.innerHTML = `
                 <div class="table-container">
@@ -1971,6 +2140,7 @@
             updateFineTypesChart();
             updatePaymentChart();
             updateTrendsChart();
+            populateFineTypeAnalysisSelector();
         }
 
         function updatePlayerFinesChart() {
@@ -2274,6 +2444,174 @@
                     }
                 }
             });
+        }
+
+        // FINE-SPECIFIC ANALYSIS FUNCTIONS
+        function populateFineTypeAnalysisSelector() {
+            const selector = document.getElementById('fineTypeAnalysisSelector');
+            if (!selector) return;
+
+            // Get unique fine types from all fines
+            const fineTypes = new Set();
+            allFines.forEach(fine => {
+                if (fine && fine.reason) {
+                    fineTypes.add(fine.reason);
+                }
+            });
+
+            // Sort alphabetically
+            const sortedFineTypes = Array.from(fineTypes).sort();
+
+            // Keep the current selection if it exists
+            const currentSelection = selector.value;
+
+            // Rebuild options
+            selector.innerHTML = '<option value="">-- Choose a fine type --</option>' +
+                sortedFineTypes.map(fineType =>
+                    `<option value="${fineType}">${fineType}</option>`
+                ).join('');
+
+            // Restore selection if it still exists
+            if (currentSelection && sortedFineTypes.includes(currentSelection)) {
+                selector.value = currentSelection;
+            }
+        }
+
+        function analyzeFineType() {
+            const selector = document.getElementById('fineTypeAnalysisSelector');
+            const content = document.getElementById('fineTypeAnalysisContent');
+
+            if (!selector || !content) return;
+
+            const selectedFineType = selector.value;
+
+            if (!selectedFineType) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <div style="font-size: 3em; margin-bottom: 10px;">🔍</div>
+                        <p>Select a fine type to see detailed breakdown</p>
+                    </div>`;
+                return;
+            }
+
+            // Filter fines by selected type
+            const finesOfType = allFines.filter(f => f.reason === selectedFineType);
+
+            if (finesOfType.length === 0) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <p>No fines found for this type</p>
+                    </div>`;
+                return;
+            }
+
+            // Calculate statistics by player
+            const playerStats = {};
+            finesOfType.forEach(fine => {
+                if (!playerStats[fine.playerName]) {
+                    playerStats[fine.playerName] = {
+                        count: 0,
+                        totalAmount: 0,
+                        paidCount: 0,
+                        paidAmount: 0,
+                        unpaidCount: 0,
+                        unpaidAmount: 0
+                    };
+                }
+
+                const stats = playerStats[fine.playerName];
+                stats.count++;
+                stats.totalAmount += fine.amount;
+
+                if (fine.paid) {
+                    stats.paidCount++;
+                    stats.paidAmount += fine.amount;
+                } else {
+                    stats.unpaidCount++;
+                    stats.unpaidAmount += fine.amount;
+                }
+            });
+
+            // Sort by total count descending
+            const sortedPlayers = Object.entries(playerStats)
+                .sort((a, b) => b[1].count - a[1].count);
+
+            // Overall statistics
+            const totalCount = finesOfType.length;
+            const totalAmount = finesOfType.reduce((sum, f) => sum + f.amount, 0);
+            const paidCount = finesOfType.filter(f => f.paid).length;
+            const paidAmount = finesOfType.filter(f => f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const unpaidCount = totalCount - paidCount;
+            const unpaidAmount = totalAmount - paidAmount;
+
+            // Build HTML
+            content.innerHTML = `
+                <div style="margin-bottom: 20px; padding: 15px; background: linear-gradient(135deg, #1D428A 0%, #0f2454 100%); border-radius: 8px; color: white;">
+                    <div style="font-size: 1.2em; font-weight: 600; margin-bottom: 10px;">${selectedFineType}</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 0.9em;">
+                        <div>
+                            <div style="opacity: 0.8;">Total Occurrences:</div>
+                            <div style="font-size: 1.3em; font-weight: 600;">${totalCount}</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Total Amount:</div>
+                            <div style="font-size: 1.3em; font-weight: 600;">£${totalAmount.toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Paid:</div>
+                            <div style="font-size: 1.3em; font-weight: 600; color: #90EE90;">${paidCount} (£${paidAmount.toFixed(2)})</div>
+                        </div>
+                        <div>
+                            <div style="opacity: 0.8;">Unpaid:</div>
+                            <div style="font-size: 1.3em; font-weight: 600; color: #FFB6C1;">${unpaidCount} (£${unpaidAmount.toFixed(2)})</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 10px; color: #1D428A;">Breakdown by Player:</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th>Count</th>
+                                <th>Total £</th>
+                                <th>Paid</th>
+                                <th>Unpaid</th>
+                                <th>Payment %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sortedPlayers.map(([playerName, stats], index) => {
+                                const paymentPercentage = stats.count > 0 ? ((stats.paidCount / stats.count) * 100).toFixed(0) : 0;
+                                const medals = ['🥇', '🥈', '🥉'];
+                                const rank = index < 3 ? medals[index] : `${index + 1}`;
+
+                                return `
+                                    <tr>
+                                        <td style="text-align: center; font-size: 1.2em;">${rank}</td>
+                                        <td style="font-weight: 600;">${playerName}</td>
+                                        <td style="text-align: center; font-weight: 600;">${stats.count}</td>
+                                        <td style="text-align: right;">£${stats.totalAmount.toFixed(2)}</td>
+                                        <td style="text-align: center; color: #00843D;">
+                                            ${stats.paidCount} (£${stats.paidAmount.toFixed(2)})
+                                        </td>
+                                        <td style="text-align: center; color: #C8102E;">
+                                            ${stats.unpaidCount} (£${stats.unpaidAmount.toFixed(2)})
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <span style="display: inline-block; background: ${paymentPercentage == 100 ? '#00843D' : paymentPercentage >= 50 ? '#FFA500' : '#C8102E'}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: 600;">
+                                                ${paymentPercentage}%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         init();
