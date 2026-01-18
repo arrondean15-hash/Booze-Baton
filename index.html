@@ -3022,6 +3022,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         <button class="tab" onclick="switchTab('manage')">⚙️ Manage</button>
         <button class="tab" onclick="switchTab('baton')">🍺 Baton</button>
         <button class="tab" onclick="switchTab('settings')">🔧 Settings</button>
+        <button class="tab" onclick="switchTab('spakka')">🎯 Spakka</button>
     </div>
 
     <div class="content">
@@ -3308,6 +3309,42 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                     <div class="stat-label">Status</div>
                     <div class="stat-value" id="dbStatus" style="font-size: 1em;">✓ OK</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Spakka Tab -->
+        <div id="spakka" class="tab-content">
+            <h2 class="section-title">Simple View</h2>
+            
+            <div class="card" style="background: linear-gradient(135deg, #FFCD00 0%, #f0bd00 100%); border-left: 4px solid #1D428A;">
+                <h3 style="margin-bottom: 15px; color: #1D428A; text-align: center; font-size: 1.5em;">💰 THE POT</h3>
+                <div style="text-align: center;">
+                    <div style="font-size: 3em; font-weight: bold; color: #1D428A; margin-bottom: 10px;" id="spakkaTotalPot">£0</div>
+                    <div style="font-size: 1.2em; color: #333;">Total money collected</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">😱 Who Owes Money?</h3>
+                <div id="spakkaUnpaidList"></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🏆 Who Has Most Fines?</h3>
+                <div id="spakkaTopOffenders"></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🍺 Who Has The Baton?</h3>
+                <div style="text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; color: #1D428A; margin-bottom: 10px;" id="spakkaBatonHolder">-</div>
+                    <div style="font-size: 1em; color: #666;">The current baton holder</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🎯 Who Drinks Next?</h3>
+                <div id="spakkaForfeits"></div>
             </div>
         </div>
     </div>

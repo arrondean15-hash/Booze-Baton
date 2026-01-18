@@ -601,11 +601,33 @@
             position: relative;
             height: 300px;
             margin-bottom: 20px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 280px;
+            }
+
+            #charts .card {
+                padding: 12px;
+                margin-bottom: 12px;
+            }
+
+            #charts .card h3 {
+                font-size: 1em;
+                margin-bottom: 10px !important;
+            }
         }
 
         @media (max-width: 480px) {
             .chart-container {
                 height: 250px;
+            }
+
+            #charts .card h3 {
+                font-size: 0.95em;
             }
         }
 
