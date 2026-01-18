@@ -306,15 +306,15 @@
             const playerCheckboxes = document.getElementById('playerCheckboxes');
             if (playerCheckboxes) {
                 if (allPlayers.length === 0) {
-                    playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px;">No players yet. Add players in the Manage tab.</div>';
+                    playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px; font-size: 0.9em;">No players yet. Add players in the Manage tab.</div>';
                 } else {
                     playerCheckboxes.innerHTML = allPlayers.map(player => `
-                        <label style="display: flex; align-items: center; padding: 8px; margin-bottom: 5px; cursor: pointer; border-radius: 6px; transition: background 0.2s;"
+                        <label style="display: flex; align-items: center; padding: 6px 8px; margin-bottom: 3px; cursor: pointer; border-radius: 4px; transition: background 0.15s;"
                                onmouseover="this.style.background='#f5f5f5'"
                                onmouseout="this.style.background='white'">
                             <input type="checkbox" name="selectedPlayers" value="${player.name}"
-                                   style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
-                            <span style="font-size: 1em; color: #333;">${player.name}</span>
+                                   style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
+                            <span style="font-size: 0.9em; color: #333;">${player.name}</span>
                         </label>
                     `).join('');
                 }
