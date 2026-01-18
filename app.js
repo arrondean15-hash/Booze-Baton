@@ -457,41 +457,55 @@
         }
 
         function updatePlayerStats() {
-            const selectedPlayer = document.getElementById('playerSelector').value;
+            const playerSelector = document.getElementById('playerSelector');
             const detailDiv = document.getElementById('playerStatsDetail');
+
+            if (!playerSelector || !detailDiv) return;
+
+            const selectedPlayer = playerSelector.value;
 
             if (selectedPlayer === 'all' || !selectedPlayer) {
                 detailDiv.innerHTML = '';
                 return;
             }
 
-            const playerFines = allFines.filter(f => f.playerName === selectedPlayer);
-            const player = allPlayers.find(p => p.name === selectedPlayer);
-            
+            const playerFines = allFines ? allFines.filter(f => f.playerName === selectedPlayer) : [];
+            const player = allPlayers ? allPlayers.find(p => p.name === selectedPlayer) : null;
+
             if (playerFines.length === 0) {
                 detailDiv.innerHTML = '<div class="empty-state"><p>No fines yet</p></div>';
                 return;
             }
 
-            const totalFines = playerFines.reduce((sum, f) => sum + f.amount, 0);
-            const unpaidFines = playerFines.filter(f => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+            const totalFines = playerFines.reduce((sum, f) => sum + (f.amount || 0), 0);
+            const unpaidFines = playerFines.filter(f => !f.paid).reduce((sum, f) => sum + (f.amount || 0), 0);
             const totalGames = player ? calculateTotalGames(player) : 0;
             const finesPerGame = totalGames > 0 ? totalFines / totalGames : 0;
-            const avgFine = totalFines / playerFines.length;
-            const worstFine = Math.max(...playerFines.map(f => f.amount));
-            const paymentRate = ((playerFines.filter(f => f.paid).length / playerFines.length) * 100).toFixed(0);
+            const avgFine = playerFines.length > 0 ? totalFines / playerFines.length : 0;
+            const worstFine = playerFines.length > 0 ? Math.max(...playerFines.map(f => f.amount || 0)) : 0;
+            const paymentRate = playerFines.length > 0
+                ? ((playerFines.filter(f => f.paid).length / playerFines.length) * 100).toFixed(0)
+                : 0;
 
             const finesByReason = {};
             playerFines.forEach(f => {
-                finesByReason[f.reason] = (finesByReason[f.reason] || 0) + 1;
+                if (f.reason) {
+                    finesByReason[f.reason] = (finesByReason[f.reason] || 0) + 1;
+                }
             });
-            const mostCommon = Object.entries(finesByReason).sort((a, b) => b[1] - a[1])[0];
+            const mostCommon = Object.keys(finesByReason).length > 0
+                ? Object.entries(finesByReason).sort((a, b) => b[1] - a[1])[0]
+                : null;
 
             const finesByDate = {};
             playerFines.forEach(f => {
-                finesByDate[f.date] = (finesByDate[f.date] || 0) + 1;
+                if (f.date) {
+                    finesByDate[f.date] = (finesByDate[f.date] || 0) + 1;
+                }
             });
-            const mostInDay = Math.max(...Object.values(finesByDate));
+            const mostInDay = Object.keys(finesByDate).length > 0
+                ? Math.max(...Object.values(finesByDate))
+                : 0;
 
             detailDiv.innerHTML = `
                 <div class="card">
@@ -507,7 +521,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">📊 Fines Per Game</div>
-                            <div class="stat-value">£${finesPerGame.toFixed(2)}</div>
+                            <div class="stat-value">£${(finesPerGame || 0).toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">📝 Fine Count</div>
@@ -515,11 +529,11 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">💵 Average Fine</div>
-                            <div class="stat-value">£${avgFine.toFixed(2)}</div>
+                            <div class="stat-value">£${(avgFine || 0).toFixed(2)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">💥 Worst Single Fine</div>
-                            <div class="stat-value">£${worstFine.toFixed(0)}</div>
+                            <div class="stat-value">£${(worstFine || 0).toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">🔥 Most Fines in One Day</div>
@@ -527,7 +541,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">⚠️ Unpaid Balance</div>
-                            <div class="stat-value">£${unpaidFines.toFixed(0)}</div>
+                            <div class="stat-value">£${(unpaidFines || 0).toFixed(0)}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">✓ Payment Rate</div>
@@ -709,73 +723,97 @@
         }
 
         function updateBatonTracker() {
-            if (batonHistory.length > 0) {
+            const batonCurrentTeam = document.getElementById('batonCurrentTeam');
+            const batonCurrentDate = document.getElementById('batonCurrentDate');
+
+            if (batonHistory && batonHistory.length > 0) {
                 const latest = batonHistory[0];
-                document.getElementById('batonCurrentTeam').textContent = latest.to;
-                document.getElementById('batonCurrentDate').textContent = `Updated: ${formatDateDDMMYYYY(latest.date)}`;
+                if (batonCurrentTeam) batonCurrentTeam.textContent = latest.to || '-';
+                if (batonCurrentDate) batonCurrentDate.textContent = `Updated: ${formatDateDDMMYYYY(latest.date)}`;
+            } else {
+                if (batonCurrentTeam) batonCurrentTeam.textContent = '-';
+                if (batonCurrentDate) batonCurrentDate.textContent = 'No baton history';
             }
 
             const forfeitTable = document.getElementById('forfeitTable');
+            if (!forfeitTable) return;
 
             const playerStats = {};
             // First, initialize all players
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
+            if (allPlayers && allPlayers.length > 0) {
+                allPlayers.forEach(player => {
+                    playerStats[player.name] = {
+                        total: 0,
+                        games: calculateTotalGames(player)
+                    };
+                });
+            }
+
             // Then add fine totals
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            if (allFines && allFines.length > 0) {
+                allFines.forEach(fine => {
+                    if (playerStats[fine.playerName]) {
+                        playerStats[fine.playerName].total += fine.amount;
+                    }
+                });
+            }
 
-            const leastGames = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, games: stats.games }))
-                .sort((a, b) => a.games - b.games)[0];
+            const statsArray = Object.entries(playerStats);
 
-            const highestTotal = Object.entries(playerStats)
-                .map(([name, stats]) => ({ name, total: stats.total }))
-                .sort((a, b) => b.total - a.total)[0];
+            const leastGames = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({ name, games: stats.games }))
+                    .sort((a, b) => a.games - b.games)[0]
+                : null;
 
-            const highestPerGame = Object.entries(playerStats)
-                .map(([name, stats]) => ({ 
-                    name, 
-                    perGame: stats.games > 0 ? stats.total / stats.games : 0 
-                }))
-                .sort((a, b) => b.perGame - a.perGame)[0];
+            const highestTotal = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({ name, total: stats.total }))
+                    .sort((a, b) => b.total - a.total)[0]
+                : null;
+
+            const highestPerGame = statsArray.length > 0
+                ? statsArray
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.games > 0 ? stats.total / stats.games : 0
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)[0]
+                : null;
 
             forfeitTable.innerHTML = `
                 <div class="player-card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>🎮 Least Games</span>
-                        <strong>${leastGames?.name || '-'} (${leastGames?.games || 0})</strong>
+                        <strong>${leastGames ? leastGames.name : '-'} (${leastGames ? leastGames.games : 0})</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>💰 Highest Total</span>
-                        <strong>${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</strong>
+                        <strong>${highestTotal ? highestTotal.name : '-'} (£${highestTotal ? highestTotal.total.toFixed(0) : 0})</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span>📊 Highest Per Game</span>
-                        <strong>${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</strong>
+                        <strong>${highestPerGame ? highestPerGame.name : '-'} (£${highestPerGame ? highestPerGame.perGame.toFixed(2) : 0})</strong>
                     </div>
                 </div>
             `;
 
             const historyTable = document.getElementById('batonHistoryTable');
-            historyTable.innerHTML = batonHistory.map(entry => `
-                <tr>
-                    <td>${formatDateDDMMYYYY(entry.date)}</td>
-                    <td>${entry.from}</td>
-                    <td>${entry.score}</td>
-                    <td>${entry.to}</td>
-                    <td>
-                        <button class="btn-small btn-danger" onclick="deleteBatonEntry('${entry.id}')">Del</button>
-                    </td>
-                </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
+            if (historyTable) {
+                historyTable.innerHTML = (batonHistory && batonHistory.length > 0)
+                    ? batonHistory.map(entry => `
+                        <tr>
+                            <td>${formatDateDDMMYYYY(entry.date)}</td>
+                            <td>${entry.from}</td>
+                            <td>${entry.score}</td>
+                            <td>${entry.to}</td>
+                            <td>
+                                <button class="btn-small btn-danger" onclick="deleteBatonEntry('${entry.id}')">Del</button>
+                            </td>
+                        </tr>
+                    `).join('')
+                    : '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
+            }
         }
 
         async function deleteBatonEntry(id) {
@@ -1452,65 +1490,90 @@
             const ctx = document.getElementById('perGameChart');
             if (!ctx) return;
 
+            if (!allPlayers || allPlayers.length === 0) {
+                console.log('No players data for per game chart');
+                return;
+            }
+
             const playerStats = {};
-            allPlayers.forEach(player => {
-                playerStats[player.name] = {
-                    total: 0,
-                    games: calculateTotalGames(player)
-                };
-            });
-            allFines.forEach(fine => {
-                if (playerStats[fine.playerName]) {
-                    playerStats[fine.playerName].total += fine.amount;
-                }
-            });
+            try {
+                allPlayers.forEach(player => {
+                    if (player && player.name) {
+                        playerStats[player.name] = {
+                            total: 0,
+                            games: calculateTotalGames(player)
+                        };
+                    }
+                });
 
-            const perGameData = Object.entries(playerStats)
-                .filter(([, stats]) => stats.games > 0)
-                .map(([name, stats]) => ({
-                    name,
-                    perGame: stats.total / stats.games
-                }))
-                .sort((a, b) => b.perGame - a.perGame)
-                .slice(0, 10);
-
-            if (charts.perGame) charts.perGame.destroy();
-            charts.perGame = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: perGameData.map(p => p.name),
-                    datasets: [{
-                        label: 'Fines Per Game (£)',
-                        data: perGameData.map(p => p.perGame),
-                        backgroundColor: '#FFCD00',
-                        borderColor: '#1D428A',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        title: {
-                            display: true,
-                            text: 'Top 10 Players by Fines Per Game',
-                            color: '#1D428A',
-                            font: { size: 14, weight: 'bold' }
+                if (allFines && allFines.length > 0) {
+                    allFines.forEach(fine => {
+                        if (fine && playerStats[fine.playerName]) {
+                            playerStats[fine.playerName].total += (fine.amount || 0);
                         }
+                    });
+                }
+
+                const perGameData = Object.entries(playerStats)
+                    .filter(([, stats]) => stats && stats.games > 0)
+                    .map(([name, stats]) => ({
+                        name,
+                        perGame: stats.total / stats.games
+                    }))
+                    .sort((a, b) => b.perGame - a.perGame)
+                    .slice(0, 10);
+
+                if (perGameData.length === 0) {
+                    console.log('No per game data to display');
+                    return;
+                }
+
+                if (charts.perGame) charts.perGame.destroy();
+                charts.perGame = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: perGameData.map(p => p.name || ''),
+                        datasets: [{
+                            label: 'Fines Per Game (£)',
+                            data: perGameData.map(p => p.perGame || 0),
+                            backgroundColor: '#FFCD00',
+                            borderColor: '#1D428A',
+                            borderWidth: 2
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return '£' + value.toFixed(2);
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Top 10 Players by Fines Per Game',
+                                color: '#1D428A',
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '£' + (value || 0).toFixed(2);
+                                    },
+                                    font: { size: 11 }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: { size: 11 }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+            } catch (error) {
+                console.error('Error updating per game chart:', error);
+            }
         }
 
         function updateFineTypesChart() {
