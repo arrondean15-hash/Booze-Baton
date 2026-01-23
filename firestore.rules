@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default rule: Public read access, no client writes
+    // All writes must go through authenticated Cloud Functions
+    match /{document=**} {
+      allow read: if true;  // Anyone can view
+      allow write: if false; // No client writes - must use Cloud Functions with password
+    }
+  }
+}

@@ -64,6 +64,47 @@
         let activeListenerCount = 0; // Track active snapshot listeners
         const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
+        // ADMIN PASSWORD MANAGEMENT
+        // Password is required for all write operations
+        // Cached in sessionStorage for convenience during the session
+        let adminPassword = sessionStorage.getItem('adminPassword') || null;
+
+        // Prompt for admin password if not cached
+        async function getAdminPassword(actionDescription = 'this action') {
+            // If password is cached, return it
+            if (adminPassword) {
+                return adminPassword;
+            }
+
+            // Prompt for password
+            const password = prompt(`Admin password required for ${actionDescription}:`);
+            if (!password) {
+                throw new Error('Password is required for admin actions');
+            }
+
+            // Cache the password for this session
+            adminPassword = password;
+            sessionStorage.setItem('adminPassword', password);
+
+            return password;
+        }
+
+        // Clear cached password (on invalid password error)
+        function clearAdminPassword() {
+            adminPassword = null;
+            sessionStorage.removeItem('adminPassword');
+        }
+
+        // Handle permission denied errors
+        function handlePermissionError(error, actionDescription) {
+            if (error.code === 'functions/permission-denied') {
+                clearAdminPassword();
+                alert(`Invalid admin password. Please try again.`);
+                throw error;
+            }
+            throw error;
+        }
+
         // CANONICAL DATASET SELECTOR FOR ANALYTICS
         // Single source of truth: returns full history if loaded, else recent 200
         // This ensures all stats/charts/leaderboards use the most complete data available
@@ -134,8 +175,9 @@
             resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Searching...</div>';
 
             try {
+                const password = await getAdminPassword('searching teams');
                 const searchTeams = httpsCallable(functions, 'searchTeams');
-                const result = await searchTeams({ query });
+                const result = await searchTeams({ query, adminPassword: password });
 
                 teamSearchResults = result.data || [];
 
@@ -174,6 +216,7 @@
 
             } catch (error) {
                 console.error('Error searching teams:', error);
+                handlePermissionError(error, 'searching teams');
                 resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams. Make sure Cloud Functions are deployed.</div>';
                 showToast('Search failed: ' + error.message, 'error');
             }
@@ -185,22 +228,26 @@
 
             try {
                 showLoading('Saving team...');
+                const password = await getAdminPassword('saving team');
 
-                // Use teamId as document ID to prevent duplicates
-                await setDoc(doc(db, 'known_teams', String(team.teamId)), {
+                const teamData = {
                     teamId: team.teamId,
                     teamName: team.teamName,
                     country: team.country,
                     city: team.city || null,
                     logo: team.logo || null,
                     createdAt: new Date().toISOString()
-                });
+                };
+
+                const saveTeamFunc = httpsCallable(functions, 'saveTeam');
+                await saveTeamFunc({ team: teamData, adminPassword: password });
 
                 hideLoading();
                 showToast(`${team.teamName} saved to known teams`, 'success');
 
             } catch (error) {
                 console.error('Error saving team:', error);
+                handlePermissionError(error, 'saving team');
                 hideLoading();
                 showToast('Failed to save team', 'error');
             }
@@ -216,9 +263,9 @@
 
             try {
                 showLoading('Updating baton holder...');
+                const password = await getAdminPassword('setting baton holder');
 
-                // Update baton_current document
-                await setDoc(doc(db, 'baton_current', 'holder'), {
+                const holderData = {
                     holderTeamId: team.teamId,
                     holderTeamName: team.teamName,
                     holderCountry: team.country,
@@ -226,7 +273,10 @@
                     holderLogo: team.logo || null,
                     lastUpdatedAt: new Date().toISOString(),
                     updatedBy: 'admin'
-                });
+                };
+
+                const setBatonHolderFunc = httpsCallable(functions, 'setBatonHolder');
+                await setBatonHolderFunc({ holder: holderData, adminPassword: password });
 
                 // Also save to known teams
                 await saveToKnownTeams(index);
@@ -236,6 +286,7 @@
 
             } catch (error) {
                 console.error('Error setting baton holder:', error);
+                handlePermissionError(error, 'setting baton holder');
                 hideLoading();
                 showToast('Failed to set baton holder', 'error');
             }
@@ -269,8 +320,9 @@
                 showLoading('Checking latest match result...');
 
                 // Call Cloud Function
+                const password = await getAdminPassword('updating baton');
                 const updateBaton = httpsCallable(functions, 'updateBaton');
-                const result = await updateBaton({ adminPin: ADMIN_PIN });
+                const result = await updateBaton({ adminPassword: password });
 
                 hideLoading();
 
@@ -324,10 +376,12 @@ ${data.reason}
                 console.error('Error updating baton:', error);
                 hideLoading();
 
+                handlePermissionError(error, 'updating baton');
+
                 let errorMsg = 'Failed to update baton';
-                if (error.code === 'permission-denied') {
-                    errorMsg = 'Invalid admin PIN';
-                } else if (error.code === 'not-found') {
+                if (error.code === 'functions/permission-denied') {
+                    errorMsg = 'Invalid admin password';
+                } else if (error.code === 'functions/not-found') {
                     errorMsg = 'No baton holder set. Use Team ID Finder first.';
                 } else if (error.message) {
                     errorMsg = error.message;
@@ -572,7 +626,11 @@ ${data.reason}
                     console.log('💾 Saving fines for', selectedPlayers.length, 'player(s)...');
                     showLoading(`Adding fine${selectedPlayers.length > 1 ? 's' : ''}...`);
 
+                    // Get admin password
+                    const password = await getAdminPassword('adding fines');
+
                     // Add a fine for each selected player
+                    const addFineFunc = httpsCallable(functions, 'addFine');
                     for (const playerName of selectedPlayers) {
                         const fine = {
                             playerName: playerName,
@@ -583,8 +641,12 @@ ${data.reason}
                             paidDate: null,
                             timestamp: new Date().toISOString()
                         };
-                        await addDoc(collection(db, 'fines'), fine);
-                        console.log('✅ Saved fine for', playerName);
+                        try {
+                            await addFineFunc({ fine, adminPassword: password });
+                            console.log('✅ Saved fine for', playerName);
+                        } catch (error) {
+                            handlePermissionError(error, 'adding fines');
+                        }
                     }
 
                     hideLoading();
@@ -616,12 +678,15 @@ ${data.reason}
 
                 try {
                     showLoading('Updating baton...');
-                    await addDoc(collection(db, 'baton'), entry);
+                    const password = await getAdminPassword('updating baton');
+                    const addBatonEntryFunc = httpsCallable(functions, 'addBatonEntry');
+                    await addBatonEntryFunc({ entry, adminPassword: password });
                     hideLoading();
                     e.target.reset();
                     setDefaultDate();
                     showToast('Baton updated successfully!', 'success');
                 } catch (error) {
+                    handlePermissionError(error, 'updating baton');
                     hideLoading();
                     showToast('Failed to update baton', 'error');
                 }
@@ -957,12 +1022,19 @@ ${data.reason}
             }
 
             showLoading('Deleting player...');
+            const password = await getAdminPassword('deleting player');
+
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
 
             const playerFines = allFines.filter(f => f.playerName === name);
+            const deleteFineFunc = httpsCallable(functions, 'deleteFine');
             for (const fine of playerFines) {
-                await deleteDoc(doc(db, 'fines', fine.id));
+                try {
+                    await deleteFineFunc({ fineId: fine.id, adminPassword: password });
+                } catch (error) {
+                    handlePermissionError(error, 'deleting fines');
+                }
             }
 
             hideLoading();
@@ -981,12 +1053,19 @@ ${data.reason}
             }
 
             showLoading('Deleting player and fines...');
+            const password = await getAdminPassword('deleting player');
+
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
 
             const playerFines = allFines.filter(f => f.playerName === name);
+            const deleteFineFunc = httpsCallable(functions, 'deleteFine');
             for (const fine of playerFines) {
-                await deleteDoc(doc(db, 'fines', fine.id));
+                try {
+                    await deleteFineFunc({ fineId: fine.id, adminPassword: password });
+                } catch (error) {
+                    handlePermissionError(error, 'deleting fines');
+                }
             }
 
             document.getElementById('deletePlayerSelect').value = '';
@@ -996,11 +1075,14 @@ ${data.reason}
 
         async function savePlayers() {
             try {
-                await setDoc(doc(db, 'config', 'players'), { list: allPlayers });
+                const password = await getAdminPassword('saving players');
+                const updatePlayersFunc = httpsCallable(functions, 'updatePlayers');
+                await updatePlayersFunc({ players: allPlayers, adminPassword: password });
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
                 updateSettingsPlayersTable();
             } catch (error) {
+                handlePermissionError(error, 'saving players');
                 console.error('Error:', error);
             }
         }
@@ -1546,10 +1628,13 @@ ${data.reason}
             if (confirm('Delete this entry?')) {
                 try {
                     showLoading('Deleting...');
-                    await deleteDoc(doc(db, 'baton', id));
+                    const password = await getAdminPassword('deleting baton entry');
+                    const deleteBatonEntryFunc = httpsCallable(functions, 'deleteBatonEntry');
+                    await deleteBatonEntryFunc({ entryId: id, adminPassword: password });
                     hideLoading();
                     showToast('Entry deleted', 'success');
                 } catch (error) {
+                    handlePermissionError(error, 'deleting baton entry');
                     hideLoading();
                     showToast('Failed to delete entry', 'error');
                 }
@@ -1712,23 +1797,31 @@ ${data.reason}
             }
 
             try {
-                await updateDoc(doc(db, 'fines', currentPaidFineId), {
-                    paid: true,
-                    paidDate: paidDate
+                const password = await getAdminPassword('marking fine as paid');
+                const updateFineFunc = httpsCallable(functions, 'updateFine');
+                await updateFineFunc({
+                    fineId: currentPaidFineId,
+                    updates: { paid: true, paidDate: paidDate },
+                    adminPassword: password
                 });
                 closePaidModal();
             } catch (error) {
+                handlePermissionError(error, 'marking fine as paid');
                 alert('❌ Failed to update');
             }
         }
 
         async function confirmUnpaid(id) {
             try {
-                await updateDoc(doc(db, 'fines', id), {
-                    paid: false,
-                    paidDate: null
+                const password = await getAdminPassword('marking fine as unpaid');
+                const updateFineFunc = httpsCallable(functions, 'updateFine');
+                await updateFineFunc({
+                    fineId: id,
+                    updates: { paid: false, paidDate: null },
+                    adminPassword: password
                 });
             } catch (error) {
+                handlePermissionError(error, 'marking fine as unpaid');
                 alert('❌ Failed to update');
             }
         }
@@ -1766,16 +1859,20 @@ ${data.reason}
 
             try {
                 showLoading(`Marking ${unpaidFines.length} fines as paid...`);
+                const password = await getAdminPassword('marking all fines as paid');
+                const updateFineFunc = httpsCallable(functions, 'updateFine');
                 for (const fine of unpaidFines) {
-                    await updateDoc(doc(db, 'fines', fine.id), {
-                        paid: true,
-                        paidDate: paidDate
+                    await updateFineFunc({
+                        fineId: fine.id,
+                        updates: { paid: true, paidDate: paidDate },
+                        adminPassword: password
                     });
                 }
                 hideLoading();
                 showToast(`Marked ${unpaidFines.length} fines as paid!`, 'success');
                 closeMarkAllModal();
             } catch (error) {
+                handlePermissionError(error, 'marking all as paid');
                 hideLoading();
                 showToast('Failed to mark all as paid', 'error');
             }
@@ -1785,10 +1882,13 @@ ${data.reason}
             if (confirm('Delete this fine?')) {
                 try {
                     showLoading('Deleting...');
-                    await deleteDoc(doc(db, 'fines', id));
+                    const password = await getAdminPassword('deleting fine');
+                    const deleteFineFunc = httpsCallable(functions, 'deleteFine');
+                    await deleteFineFunc({ fineId: id, adminPassword: password });
                     hideLoading();
                     showToast('Fine deleted', 'success');
                 } catch (error) {
+                    handlePermissionError(error, 'deleting fine');
                     hideLoading();
                     showToast('Failed to delete fine', 'error');
                 }
@@ -1801,13 +1901,13 @@ ${data.reason}
 
             try {
                 showLoading('Clearing all fines...');
-                const snapshot = await getDocs(collection(db, 'fines'));
-                for (const d of snapshot.docs) {
-                    await deleteDoc(d.ref);
-                }
+                const password = await getAdminPassword('clearing all fines');
+                const deleteAllFinesFunc = httpsCallable(functions, 'deleteAllFines');
+                const result = await deleteAllFinesFunc({ adminPassword: password });
                 hideLoading();
-                showToast('All fines cleared successfully', 'success');
+                showToast(`Cleared ${result.data.count} fines successfully`, 'success');
             } catch (error) {
+                handlePermissionError(error, 'clearing all fines');
                 hideLoading();
                 showToast('Failed to clear fines', 'error');
             }
@@ -2321,20 +2421,16 @@ ${data.reason}
             }
 
             try {
+                // Get admin password
+                const password = await getAdminPassword(replaceAll ? 'replacing all fines' : 'importing fines');
+
                 // If replaceAll, delete all existing fines first
                 if (replaceAll) {
                     showLoading('Deleting all existing fines...');
                     showImportAlert('Deleting all existing fines...', 'info');
-                    const snapshot = await getDocs(collection(db, 'fines'));
-                    let deleted = 0;
-                    for (const d of snapshot.docs) {
-                        await deleteDoc(d.ref);
-                        deleted++;
-                        if (deleted % 50 === 0) {
-                            showImportAlert(`Deleting... ${deleted}/${snapshot.size} fines`, 'info');
-                        }
-                    }
-                    showImportAlert(`Deleted ${snapshot.size} existing fines`, 'success');
+                    const deleteAllFinesFunc = httpsCallable(functions, 'deleteAllFines');
+                    const result = await deleteAllFinesFunc({ adminPassword: password });
+                    showImportAlert(`Deleted ${result.data.count} existing fines`, 'success');
                 }
 
                 // Show progress message
@@ -2343,8 +2439,9 @@ ${data.reason}
                 showLoading(`${action} ${fines.length} fines...`);
 
                 let imported = 0;
+                const addFineFunc = httpsCallable(functions, 'addFine');
                 for (const fine of fines) {
-                    await addDoc(collection(db, 'fines'), fine);
+                    await addFineFunc({ fine, adminPassword: password });
                     imported++;
 
                     // Update progress every 50 fines
@@ -2361,6 +2458,7 @@ ${data.reason}
                 showToast(successMsg, 'success');
             } catch (error) {
                 console.error('Import error:', error);
+                handlePermissionError(error, 'importing CSV');
                 hideLoading();
                 const errorMsg = `❌ Import failed. Error: ${error.message}`;
                 showImportAlert(errorMsg, 'error');
@@ -2447,10 +2545,13 @@ ${data.reason}
 
         async function saveFineReasons() {
             try {
-                await setDoc(doc(db, 'config', 'fineReasons'), { list: fineReasons });
+                const password = await getAdminPassword('saving fine reasons');
+                const updateFineReasonsFunc = httpsCallable(functions, 'updateFineReasons');
+                await updateFineReasonsFunc({ fineReasons, adminPassword: password });
                 populateFineReasons();
                 updateFineReasonsTable();
             } catch (error) {
+                handlePermissionError(error, 'saving fine reasons');
                 console.error('Error:', error);
             }
         }
