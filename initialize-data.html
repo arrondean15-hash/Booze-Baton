@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booze Baton - Data Initialization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1D428A;
+        }
+        button {
+            background: #1D428A;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0f2d5c;
+        }
+        .success {
+            background: #00843D;
+            padding: 15px;
+            border-radius: 5px;
+            color: white;
+            margin: 15px 0;
+            display: none;
+        }
+        .error {
+            background: #C8102E;
+            padding: 15px;
+            border-radius: 5px;
+            color: white;
+            margin: 15px 0;
+            display: none;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin: 10px 0;
+            padding: 10px;
+            font-family: monospace;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .info {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #00843D;
+            margin: 15px 0;
+        }
+        #output {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Booze Baton - Data Initialization</h1>
+
+        <div class="info">
+            <strong>📋 Instructions:</strong><br>
+            1. Edit the player data below (add all your players)<br>
+            2. Click "Initialize Database"<br>
+            3. Enter your admin password when prompted<br>
+            4. Wait for success message<br>
+            5. Refresh your main app
+        </div>
+
+        <h3>👥 Players Data</h3>
+        <p>Edit this JSON with your players:</p>
+        <textarea id="playersData">[
+  {
+    "name": "Stuart",
+    "eafc25": 50,
+    "season2425": 25,
+    "eafc26": 10,
+    "adjustment": 0
+  },
+  {
+    "name": "Player 2",
+    "eafc25": 45,
+    "season2425": 20,
+    "eafc26": 8,
+    "adjustment": 0
+  },
+  {
+    "name": "Player 3",
+    "eafc25": 40,
+    "season2425": 18,
+    "eafc26": 7,
+    "adjustment": 0
+  }
+]</textarea>
+
+        <h3>💰 Fine Reasons</h3>
+        <textarea id="fineReasonsData">[
+  { "reason": "10 minutes late", "amount": 2.00 },
+  { "reason": "Not declaring availability by 6.30pm (via poll)", "amount": 2.50 },
+  { "reason": "No show after declaring available", "amount": 5.00 },
+  { "reason": "Rage Quit", "amount": 4.00 },
+  { "reason": "Being a worst", "amount": 1.00 },
+  { "reason": "Red card", "amount": 1.00 },
+  { "reason": "Unnecessary red card", "amount": 2.00 }
+]</textarea>
+
+        <button onclick="initializeDatabase()">🚀 Initialize Database</button>
+        <button onclick="checkDatabase()">🔍 Check Current Data</button>
+
+        <div id="success" class="success"></div>
+        <div id="error" class="error"></div>
+        <div id="output"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, getDocs, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
+            authDomain: "booze-baton.firebaseapp.com",
+            projectId: "booze-baton",
+            storageBucket: "booze-baton.firebasestorage.app",
+            messagingSenderId: "988291694611",
+            appId: "1:988291694611:web:84f4e54eca2fccba733fe6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const functions = getFunctions(app);
+
+        function showSuccess(msg) {
+            const el = document.getElementById('success');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.innerHTML += msg + '<br>';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        window.checkDatabase = async function() {
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+            log('=== CHECKING DATABASE ===');
+
+            try {
+                // Check players
+                log('\n📋 Checking players...');
+                const configSnap = await getDocs(collection(db, 'config'));
+                if (configSnap.empty) {
+                    log('❌ No config collection found');
+                } else {
+                    configSnap.forEach(doc => {
+                        if (doc.id === 'players') {
+                            const data = doc.data();
+                            if (data.list && Array.isArray(data.list)) {
+                                log(`✅ Found ${data.list.length} players`);
+                                data.list.forEach(p => log(`  - ${p.name}`));
+                            }
+                        }
+                        if (doc.id === 'fineReasons') {
+                            const data = doc.data();
+                            if (data.list && Array.isArray(data.list)) {
+                                log(`✅ Found ${data.list.length} fine reasons`);
+                            }
+                        }
+                    });
+                }
+
+                // Check fines
+                log('\n💰 Checking fines...');
+                const finesSnap = await getDocs(collection(db, 'fines'));
+                log(`Found ${finesSnap.size} fines`);
+
+                // Check baton
+                log('\n🍺 Checking baton...');
+                const batonSnap = await getDocs(collection(db, 'baton_current'));
+                if (batonSnap.empty) {
+                    log('❌ No baton holder set');
+                } else {
+                    batonSnap.forEach(doc => {
+                        const data = doc.data();
+                        log(`✅ Current holder: ${data.holderTeamName || 'Unknown'}`);
+                    });
+                }
+
+                log('\n✅ Check complete!');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                showError('Check failed: ' + error.message);
+            }
+        };
+
+        window.initializeDatabase = async function() {
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+            log('=== INITIALIZING DATABASE ===');
+
+            try {
+                // Get password
+                const password = prompt('Enter admin password (SquireyStu69!):');
+                if (!password) {
+                    showError('Password required');
+                    return;
+                }
+
+                // Parse players
+                log('\n👥 Parsing players data...');
+                const playersText = document.getElementById('playersData').value;
+                const players = JSON.parse(playersText);
+                log(`Found ${players.length} players to add`);
+
+                // Parse fine reasons
+                log('\n💰 Parsing fine reasons...');
+                const fineReasonsText = document.getElementById('fineReasonsData').value;
+                const fineReasons = JSON.parse(fineReasonsText);
+                log(`Found ${fineReasons.length} fine reasons to add`);
+
+                // Save players
+                log('\n📤 Saving players to database...');
+                const updatePlayers = httpsCallable(functions, 'updatePlayers');
+                await updatePlayers({ players, adminPassword: password });
+                log('✅ Players saved successfully!');
+
+                // Save fine reasons
+                log('\n📤 Saving fine reasons to database...');
+                const updateFineReasons = httpsCallable(functions, 'updateFineReasons');
+                await updateFineReasons({ fineReasons, adminPassword: password });
+                log('✅ Fine reasons saved successfully!');
+
+                log('\n🎉 INITIALIZATION COMPLETE!');
+                log('');
+                log('Next steps:');
+                log('1. Go to your main app: https://booze-baton.web.app');
+                log('2. Hard refresh: Ctrl+Shift+R (or Cmd+Shift+R on Mac)');
+                log('3. You should now see all players in dropdowns!');
+
+                showSuccess('✅ Database initialized successfully! Refresh your main app.');
+
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                console.error(error);
+                showError('Initialization failed: ' + error.message);
+            }
+        };
+    </script>
+</body>
+</html>
