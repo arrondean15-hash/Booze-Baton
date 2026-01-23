@@ -9,14 +9,14 @@ const API_BASE_URL = 'https://v3.football.api-sports.io/';
 
 // Admin PIN configuration
 // Set with: firebase functions:config:set admin.pin="YOUR_PIN"
-const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN || '1234';
+const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN || 'SquireyStu69!';
 
 // Helper function to validate admin access
-function validateAdmin(pin) {
-  if (!pin || pin !== ADMIN_PIN) {
+function validateAdmin(password) {
+  if (!password || password !== ADMIN_PIN) {
     throw new functions.https.HttpsError(
       'permission-denied',
-      'Invalid admin PIN'
+      'Invalid admin password'
     );
   }
 }
@@ -54,13 +54,18 @@ async function callFootballAPI(endpoint, params = {}) {
 /**
  * Cloud Function: searchTeams
  * Searches for football teams by name
+ * Requires admin password for access
  *
  * @param {string} query - Team name to search for
+ * @param {string} adminPassword - Admin password for authentication
  * @returns {Array} Array of team objects
  */
 exports.searchTeams = functions.https.onCall(async (data, context) => {
   try {
-    const { query } = data;
+    const { query, adminPassword } = data;
+
+    // Validate admin access
+    validateAdmin(adminPassword);
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       throw new functions.https.HttpsError(
@@ -106,13 +111,18 @@ exports.searchTeams = functions.https.onCall(async (data, context) => {
 /**
  * Cloud Function: getLatestCompetitiveMatch
  * Fetches the most recent finished competitive match for a team
+ * Requires admin password for access
  *
  * @param {number} teamId - The team ID from API-Football
+ * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Match object or null if no match found
  */
 exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context) => {
   try {
-    const { teamId } = data;
+    const { teamId, adminPassword } = data;
+
+    // Validate admin access
+    validateAdmin(adminPassword);
 
     if (!teamId || typeof teamId !== 'number') {
       throw new functions.https.HttpsError(
@@ -213,7 +223,7 @@ exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context)
  * - Only competitive matches (friendlies ignored)
  * - Prevents duplicate processing of same match
  *
- * @param {string} adminPin - Admin PIN for authentication
+ * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Result of baton update
  */
 exports.updateBaton = functions.https.onCall(async (data, context) => {
@@ -227,10 +237,10 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
 
   try {
-    const { adminPin } = data;
+    const { adminPassword } = data;
 
     // Validate admin access
-    validateAdmin(adminPin);
+    validateAdmin(adminPassword);
 
     functions.logger.info('Starting baton update check...');
 
@@ -431,5 +441,364 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
       'internal',
       `Failed to update baton: ${error.message}`
     );
+  }
+});
+
+/**
+ * Cloud Function: addFine
+ * Adds a new fine to the database
+ * Requires admin password
+ *
+ * @param {Object} fine - Fine object to add
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Result with fine ID
+ */
+exports.addFine = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { fine, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!fine || typeof fine !== 'object') {
+      throw new functions.https.HttpsError('invalid-argument', 'Fine object is required');
+    }
+
+    functions.logger.info('Adding fine:', fine);
+    const docRef = await db.collection('fines').add(fine);
+
+    return { success: true, fineId: docRef.id };
+  } catch (error) {
+    functions.logger.error('Error in addFine:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to add fine: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: deleteFine
+ * Deletes a fine from the database
+ * Requires admin password
+ *
+ * @param {string} fineId - ID of fine to delete
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.deleteFine = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { fineId, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!fineId || typeof fineId !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'Fine ID is required');
+    }
+
+    functions.logger.info('Deleting fine:', fineId);
+    await db.collection('fines').doc(fineId).delete();
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in deleteFine:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to delete fine: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: updateFine
+ * Updates a fine in the database (e.g., mark as paid)
+ * Requires admin password
+ *
+ * @param {string} fineId - ID of fine to update
+ * @param {Object} updates - Fields to update
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.updateFine = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { fineId, updates, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!fineId || typeof fineId !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'Fine ID is required');
+    }
+    if (!updates || typeof updates !== 'object') {
+      throw new functions.https.HttpsError('invalid-argument', 'Updates object is required');
+    }
+
+    functions.logger.info('Updating fine:', fineId, updates);
+    await db.collection('fines').doc(fineId).update(updates);
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in updateFine:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to update fine: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: addBatonEntry
+ * Adds a baton transfer entry to history
+ * Requires admin password
+ *
+ * @param {Object} entry - Baton entry object
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Result with entry ID
+ */
+exports.addBatonEntry = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { entry, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!entry || typeof entry !== 'object') {
+      throw new functions.https.HttpsError('invalid-argument', 'Entry object is required');
+    }
+
+    functions.logger.info('Adding baton entry:', entry);
+    const docRef = await db.collection('baton').add(entry);
+
+    return { success: true, entryId: docRef.id };
+  } catch (error) {
+    functions.logger.error('Error in addBatonEntry:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to add baton entry: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: deleteBatonEntry
+ * Deletes a baton entry from history
+ * Requires admin password
+ *
+ * @param {string} entryId - ID of baton entry to delete
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.deleteBatonEntry = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { entryId, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!entryId || typeof entryId !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'Entry ID is required');
+    }
+
+    functions.logger.info('Deleting baton entry:', entryId);
+    await db.collection('baton').doc(entryId).delete();
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in deleteBatonEntry:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to delete baton entry: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: saveTeam
+ * Saves a team to known_teams collection
+ * Requires admin password
+ *
+ * @param {Object} team - Team object to save
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.saveTeam = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { team, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!team || typeof team !== 'object' || !team.teamId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Valid team object with teamId is required');
+    }
+
+    functions.logger.info('Saving team:', team);
+    await db.collection('known_teams').doc(String(team.teamId)).set(team);
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in saveTeam:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to save team: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: setBatonHolder
+ * Sets the current baton holder
+ * Requires admin password
+ *
+ * @param {Object} holder - Holder object with team details
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.setBatonHolder = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { holder, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!holder || typeof holder !== 'object') {
+      throw new functions.https.HttpsError('invalid-argument', 'Holder object is required');
+    }
+
+    functions.logger.info('Setting baton holder:', holder);
+    await db.collection('baton_current').doc('holder').set(holder);
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in setBatonHolder:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to set baton holder: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: updatePlayers
+ * Updates the players list in config
+ * Requires admin password
+ *
+ * @param {Array} players - Array of player names
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.updatePlayers = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { players, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!Array.isArray(players)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Players must be an array');
+    }
+
+    functions.logger.info('Updating players:', players);
+    await db.collection('config').doc('players').set({ list: players });
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in updatePlayers:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to update players: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: updateFineReasons
+ * Updates the fine reasons list in config
+ * Requires admin password
+ *
+ * @param {Array} fineReasons - Array of fine reason objects
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status
+ */
+exports.updateFineReasons = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { fineReasons, adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    if (!Array.isArray(fineReasons)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Fine reasons must be an array');
+    }
+
+    functions.logger.info('Updating fine reasons:', fineReasons);
+    await db.collection('config').doc('fineReasons').set({ list: fineReasons });
+
+    return { success: true };
+  } catch (error) {
+    functions.logger.error('Error in updateFineReasons:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to update fine reasons: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: deleteAllFines
+ * Deletes all fines from the database (for data management)
+ * Requires admin password
+ *
+ * @param {string} adminPassword - Admin password for authentication
+ * @returns {Object} Success status with count
+ */
+exports.deleteAllFines = functions.https.onCall(async (data, context) => {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  const db = admin.firestore();
+
+  try {
+    const { adminPassword } = data;
+    validateAdmin(adminPassword);
+
+    functions.logger.info('Deleting all fines');
+    const snapshot = await db.collection('fines').get();
+    const batch = db.batch();
+    let count = 0;
+
+    snapshot.forEach(doc => {
+      batch.delete(doc.ref);
+      count++;
+    });
+
+    await batch.commit();
+    functions.logger.info(`Deleted ${count} fines`);
+
+    return { success: true, count };
+  } catch (error) {
+    functions.logger.error('Error in deleteAllFines:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Failed to delete all fines: ${error.message}`);
   }
 });

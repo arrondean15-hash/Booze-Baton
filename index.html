@@ -3333,7 +3333,23 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         <!-- Settings Tab -->
         <div id="settings" class="tab-content">
             <h2 class="section-title">Settings</h2>
-            
+
+            <!-- App Lock/Unlock -->
+            <div class="card" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border: 2px solid #1D428A;">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">🔐 App Security</h3>
+                <div id="lockStatusText" style="margin-bottom: 15px; font-size: 1.1em; text-align: center; padding: 10px; background: white; border-radius: 8px;">
+                    <span style="color: #C8102E; font-weight: 600;">🔒 App Locked - View Only Mode</span>
+                </div>
+                <button id="unlockAppBtn" class="btn btn-primary" onclick="unlockApp()" style="width: 100%; font-size: 1.1em; padding: 12px;">
+                    🔒 Unlock App for Editing
+                </button>
+                <div class="info-text" style="margin-top: 10px;">
+                    ℹ️ <strong>Locked:</strong> You can view all data but cannot edit.<br>
+                    ℹ️ <strong>Unlocked:</strong> You can add/edit/delete fines and manage data.<br>
+                    ℹ️ App will auto-lock when you close the browser.
+                </div>
+            </div>
+
             <div class="card">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">Data Management</h3>
 
