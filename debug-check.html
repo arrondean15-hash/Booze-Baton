@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booze Baton - Debug Check</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { color: #00ff00; border-bottom: 2px solid #00ff00; padding-bottom: 10px; }
+        h2 { color: #ffff00; margin-top: 30px; }
+        .success { color: #00ff00; }
+        .error { color: #ff0000; }
+        .warning { color: #ffaa00; }
+        .info { color: #00aaff; }
+        pre {
+            background: #000;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 3px solid #00ff00;
+        }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px 5px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        button:hover { background: #00cc00; }
+        .section {
+            background: #2a2a2a;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border-left: 4px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Booze Baton Debug Console</h1>
+    <p class="info">This page will diagnose why your data isn't showing...</p>
+
+    <button onclick="runFullDiagnostic()">▶️ Run Full Diagnostic</button>
+    <button onclick="clearOutput()">🗑️ Clear Output</button>
+
+    <div id="output"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, getDocs, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
+            authDomain: "booze-baton.firebaseapp.com",
+            projectId: "booze-baton",
+            storageBucket: "booze-baton.firebasestorage.app",
+            messagingSenderId: "988291694611",
+            appId: "1:988291694611:web:84f4e54eca2fccba733fe6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const output = document.getElementById('output');
+
+        function log(msg, type = 'info') {
+            const colors = {
+                success: '#00ff00',
+                error: '#ff0000',
+                warning: '#ffaa00',
+                info: '#00aaff'
+            };
+            output.innerHTML += `<span style="color: ${colors[type]}">${msg}</span><br>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        window.clearOutput = () => output.innerHTML = '';
+
+        window.runFullDiagnostic = async function() {
+            clearOutput();
+            log('═══════════════════════════════════════════════════════', 'info');
+            log('🔍 STARTING FULL DIAGNOSTIC', 'success');
+            log('═══════════════════════════════════════════════════════', 'info');
+            log('');
+
+            try {
+                // Test 1: Check Firebase Connection
+                log('📡 TEST 1: Firebase Connection', 'warning');
+                log('   ✓ Firebase initialized successfully', 'success');
+                log('   ✓ Project ID: booze-baton', 'success');
+                log('');
+
+                // Test 2: Check Firestore Access
+                log('📂 TEST 2: Firestore Database Access', 'warning');
+                try {
+                    const testSnap = await getDocs(collection(db, 'config'));
+                    log(`   ✓ Can read from Firestore (found ${testSnap.size} config docs)`, 'success');
+                } catch (error) {
+                    log(`   ✗ CANNOT READ FROM FIRESTORE!`, 'error');
+                    log(`   Error: ${error.message}`, 'error');
+                    log(`   This means your Firestore rules are blocking reads!`, 'error');
+                }
+                log('');
+
+                // Test 3: Check Players Data
+                log('👥 TEST 3: Players Data', 'warning');
+                const configSnap = await getDocs(collection(db, 'config'));
+                let foundPlayers = false;
+                let playersCount = 0;
+
+                configSnap.forEach(d => {
+                    if (d.id === 'players') {
+                        foundPlayers = true;
+                        const data = d.data();
+                        if (data.list && Array.isArray(data.list)) {
+                            playersCount = data.list.length;
+                            log(`   ✓ Found players document`, 'success');
+                            log(`   ✓ Total players: ${playersCount}`, 'success');
+                            log('   Players list:', 'info');
+                            data.list.forEach((p, i) => {
+                                log(`      ${i + 1}. ${p.name} (EAFC25: ${p.eafc25}, Season 24/25: ${p.season2425}, EAFC26: ${p.eafc26})`, 'info');
+                            });
+                        } else {
+                            log(`   ✗ Players document exists but has wrong structure!`, 'error');
+                            log(`   Structure: ${JSON.stringify(data)}`, 'error');
+                        }
+                    }
+                });
+
+                if (!foundPlayers) {
+                    log(`   ✗ NO PLAYERS DOCUMENT FOUND!`, 'error');
+                    log(`   Your config/players document is missing!`, 'error');
+                }
+                log('');
+
+                // Test 4: Check Fine Reasons
+                log('💰 TEST 4: Fine Reasons Data', 'warning');
+                let foundReasons = false;
+                configSnap.forEach(d => {
+                    if (d.id === 'fineReasons') {
+                        foundReasons = true;
+                        const data = d.data();
+                        if (data.list && Array.isArray(data.list)) {
+                            log(`   ✓ Found ${data.list.length} fine reasons`, 'success');
+                        }
+                    }
+                });
+                if (!foundReasons) {
+                    log(`   ✗ No fine reasons found`, 'warning');
+                }
+                log('');
+
+                // Test 5: Check Fines Collection
+                log('📊 TEST 5: Fines Collection', 'warning');
+                const finesSnap = await getDocs(collection(db, 'fines'));
+                log(`   ✓ Total fines in database: ${finesSnap.size}`, 'success');
+                if (finesSnap.size > 0) {
+                    log(`   Sample fine:`, 'info');
+                    const firstFine = finesSnap.docs[0].data();
+                    log(`      Player: ${firstFine.playerName}`, 'info');
+                    log(`      Reason: ${firstFine.reason}`, 'info');
+                    log(`      Amount: £${firstFine.amount}`, 'info');
+                }
+                log('');
+
+                // Test 6: Check Baton
+                log('🍺 TEST 6: Baton Current Holder', 'warning');
+                const batonSnap = await getDocs(collection(db, 'baton_current'));
+                if (batonSnap.empty) {
+                    log(`   ✗ No baton holder set!`, 'error');
+                } else {
+                    batonSnap.forEach(d => {
+                        const data = d.data();
+                        log(`   ✓ Current holder: ${data.holderTeamName || 'Unknown'}`, 'success');
+                    });
+                }
+                log('');
+
+                // Test 7: Check Baton History
+                log('📜 TEST 7: Baton History', 'warning');
+                const batonHistorySnap = await getDocs(collection(db, 'baton'));
+                log(`   ✓ Baton history entries: ${batonHistorySnap.size}`, 'success');
+                log('');
+
+                // Summary
+                log('═══════════════════════════════════════════════════════', 'info');
+                log('📋 DIAGNOSTIC SUMMARY', 'success');
+                log('═══════════════════════════════════════════════════════', 'info');
+
+                if (foundPlayers && playersCount > 0) {
+                    log(`✅ DATA EXISTS: Found ${playersCount} players`, 'success');
+                    log(``, 'info');
+                    log(`🔍 ISSUE: If data exists but doesn't show in your app:`, 'warning');
+                    log(`   1. Your deployed app.js might be old/cached`, 'warning');
+                    log(`   2. Check browser console (F12) for JavaScript errors`, 'warning');
+                    log(`   3. Try hard refresh: Ctrl+Shift+R`, 'warning');
+                    log(`   4. Your app might need to be unlocked first (go to Settings)`, 'warning');
+                } else {
+                    log(`❌ NO DATA: Players not found in database`, 'error');
+                    log(`   Use the initialize-data.html tool to add players`, 'error');
+                }
+
+                log('');
+                log('═══════════════════════════════════════════════════════', 'info');
+                log('✅ DIAGNOSTIC COMPLETE', 'success');
+                log('═══════════════════════════════════════════════════════', 'info');
+
+            } catch (error) {
+                log('', 'error');
+                log(`❌ CRITICAL ERROR: ${error.message}`, 'error');
+                log(`Stack: ${error.stack}`, 'error');
+            }
+        };
+
+        // Auto-run on load
+        setTimeout(() => runFullDiagnostic(), 500);
+    </script>
+</body>
+</html>
