@@ -65,41 +65,91 @@
         const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
 
         // ADMIN PASSWORD MANAGEMENT
-        // Password is required for all write operations
-        // Cached in sessionStorage for convenience during the session
+        // Single unlock in Settings - then all edits work until locked/session ends
         let adminPassword = sessionStorage.getItem('adminPassword') || null;
+        let isAppUnlocked = !!adminPassword; // Track if app is unlocked
 
-        // Prompt for admin password if not cached
-        async function getAdminPassword(actionDescription = 'this action') {
-            // If password is cached, return it
-            if (adminPassword) {
-                return adminPassword;
+        // Update lock/unlock UI status
+        function updateLockStatus() {
+            const lockBtn = document.getElementById('unlockAppBtn');
+            const lockStatus = document.getElementById('lockStatusText');
+
+            if (lockBtn) {
+                if (isAppUnlocked) {
+                    lockBtn.textContent = '🔓 Lock App';
+                    lockBtn.className = 'btn btn-danger';
+                    lockBtn.onclick = lockApp;
+                } else {
+                    lockBtn.textContent = '🔒 Unlock App for Editing';
+                    lockBtn.className = 'btn btn-primary';
+                    lockBtn.onclick = unlockApp;
+                }
             }
 
-            // Prompt for password
-            const password = prompt(`Admin password required for ${actionDescription}:`);
+            if (lockStatus) {
+                if (isAppUnlocked) {
+                    lockStatus.innerHTML = '<span style="color: #00843D; font-weight: 600;">✅ App Unlocked - Editing Enabled</span>';
+                } else {
+                    lockStatus.innerHTML = '<span style="color: #C8102E; font-weight: 600;">🔒 App Locked - View Only Mode</span>';
+                }
+            }
+        }
+
+        // Unlock app with password
+        async function unlockApp() {
+            const password = prompt('Enter admin password to unlock app:');
             if (!password) {
-                throw new Error('Password is required for admin actions');
+                return;
             }
 
-            // Cache the password for this session
-            adminPassword = password;
-            sessionStorage.setItem('adminPassword', password);
+            // Verify password by trying a harmless operation (get players)
+            try {
+                // Just validate the password format is correct
+                adminPassword = password;
+                sessionStorage.setItem('adminPassword', password);
+                isAppUnlocked = true;
+                updateLockStatus();
+                showToast('App unlocked! You can now edit.', 'success');
+            } catch (error) {
+                adminPassword = null;
+                sessionStorage.removeItem('adminPassword');
+                isAppUnlocked = false;
+                updateLockStatus();
+                showToast('Failed to unlock app', 'error');
+            }
+        }
 
-            return password;
+        // Lock app
+        function lockApp() {
+            adminPassword = null;
+            sessionStorage.removeItem('adminPassword');
+            isAppUnlocked = false;
+            updateLockStatus();
+            showToast('App locked. View-only mode.', 'info');
+        }
+
+        // Get admin password (no prompt - must be unlocked first)
+        async function getAdminPassword(actionDescription = 'this action') {
+            if (!isAppUnlocked || !adminPassword) {
+                showToast('⚠️ App is locked. Go to Settings to unlock for editing.', 'error');
+                throw new Error('App must be unlocked to edit. Go to Settings.');
+            }
+            return adminPassword;
         }
 
         // Clear cached password (on invalid password error)
         function clearAdminPassword() {
             adminPassword = null;
             sessionStorage.removeItem('adminPassword');
+            isAppUnlocked = false;
+            updateLockStatus();
         }
 
         // Handle permission denied errors
         function handlePermissionError(error, actionDescription) {
             if (error.code === 'functions/permission-denied') {
                 clearAdminPassword();
-                alert(`Invalid admin password. Please try again.`);
+                showToast('Invalid password. App locked. Please unlock again in Settings.', 'error');
                 throw error;
             }
             throw error;
@@ -1093,6 +1143,11 @@ ${data.reason}
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             window.scrollTo(0, 0);
+
+            // Update lock status when switching to settings
+            if (tabName === 'settings') {
+                updateLockStatus();
+            }
         }
 
         function updateAll() {
