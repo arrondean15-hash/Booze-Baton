@@ -23,10 +23,17 @@ const EA_API_HEADERS = {
 
 // Admin PIN configuration
 // Set with: firebase functions:config:set admin.pin="YOUR_PIN"
-const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN || 'SquireyStu69!';
+// IMPORTANT: Password must be set in Firebase config, not in code
+const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN;
 
 // Helper function to validate admin access
 function validateAdmin(password) {
+  if (!ADMIN_PIN) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Admin PIN not configured. Run: firebase functions:config:set admin.pin="YOUR_PIN"'
+    );
+  }
   if (!password || password !== ADMIN_PIN) {
     throw new functions.https.HttpsError(
       'permission-denied',
