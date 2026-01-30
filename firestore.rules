@@ -7,5 +7,18 @@ service cloud.firestore {
       allow read: if true;  // Anyone can view
       allow write: if false; // No client writes - must use Cloud Functions with password
     }
+
+    // Voting collection: Allow public writes for daily voting
+    // Anyone can submit/update their vote during voting hours
+    match /dailyVotes/{date} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Config collection: Allow writes for player mappings
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

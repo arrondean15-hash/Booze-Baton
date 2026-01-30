@@ -3014,12 +3014,14 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 <div id="versionInfo" style="font-size: 0.7em; color: #999; margin-top: 8px; opacity: 0.7;">
                     <span>v2.1.0</span> • <span id="lastUpdated">Last updated: 18 Jan 2026</span>
                 </div>
+                <button id="headerRefreshBtn" class="btn" style="margin-top: 10px; background: #FFCD00; color: #1D428A; font-weight: 600; padding: 8px 16px; font-size: 0.85em;" onclick="refreshHistory()">🔄 Refresh Data</button>
             </div>
         </div>
     </div>
 
     <div class="tabs">
         <button class="tab active" onclick="switchTab('add')">➕ Add</button>
+        <button class="tab" onclick="switchTab('voting')">🗳️ Voting</button>
         <button class="tab" onclick="switchTab('stats')">📊 Stats</button>
         <button class="tab" onclick="switchTab('charts')">📈 Charts</button>
         <button class="tab" onclick="switchTab('history')">📋 History</button>
@@ -3028,6 +3030,7 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
         <button class="tab" onclick="switchTab('baton')">🍺 Baton</button>
         <button class="tab" onclick="switchTab('settings')">🔧 Settings</button>
         <button class="tab" onclick="switchTab('spakka')">🎯 Spakka</button>
+        <button class="tab" onclick="switchTab('matches')">⚽ Matches</button>
     </div>
 
     <div class="content">
@@ -3294,6 +3297,51 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 </div>
             </div>
 
+            <!-- Backfill History Section -->
+            <div class="card" style="border: 2px dashed #1D428A;">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">📜 Add Historical Entry</h3>
+                <div class="info-text" style="margin-bottom: 15px; font-size: 0.9em;">
+                    Use this to backfill past baton transfers. This adds to history only and doesn't change the current holder.
+                </div>
+
+                <div style="display: grid; gap: 15px;">
+                    <div>
+                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Match Date</label>
+                        <input type="date" id="historyDate" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Previous Holder (lost the baton)</label>
+                        <input type="text" id="historyFromTeam" placeholder="e.g., Leeds United" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">New Holder (won the baton)</label>
+                        <input type="text" id="historyToTeam" placeholder="e.g., Arsenal" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                    </div>
+
+                    <div style="display: flex; gap: 15px;">
+                        <div style="flex: 1;">
+                            <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Loser Score</label>
+                            <input type="number" id="historyFromScore" value="0" min="0" style="width: 100%; padding: 10px; text-align: center; box-sizing: border-box;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Winner Score</label>
+                            <input type="number" id="historyToScore" value="0" min="0" style="width: 100%; padding: 10px; text-align: center; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Competition (optional)</label>
+                        <input type="text" id="historyCompetition" placeholder="e.g., Premier League" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                    </div>
+
+                    <button type="button" class="btn" onclick="addHistoricalEntry()" style="width: 100%; padding: 15px; background: #1D428A;">
+                        📜 Add to History
+                    </button>
+                </div>
+            </div>
+
             <div class="card">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">Baton History</h3>
                 <div class="table-container">
@@ -3397,20 +3445,26 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 <button class="btn btn-secondary" onclick="addNewFineReason()">Add New Fine Type</button>
             </div>
 
+            <!-- Pro Clubs Player Name Mapping -->
+            <div class="card" style="border: 2px solid #27ae60;">
+                <h3 style="margin-bottom: 10px; color: #27ae60;">⚽ Pro Clubs Player Mapping</h3>
+                <div class="info-text" style="margin-bottom: 15px;">
+                    Map EA gamertags to your app player names for automatic fine generation.
+                </div>
+                <div id="playerMappingTable"></div>
+                <button class="btn" onclick="savePlayerMappings()" style="background: #27ae60; margin-top: 10px;">💾 Save Mappings</button>
+            </div>
+
             <!-- Admin Team ID Finder -->
             <div class="card" style="border: 2px solid #1D428A;">
                 <h3 style="margin-bottom: 10px; color: #1D428A;">🔐 Admin: Team ID Finder</h3>
 
                 <!-- Lock Screen -->
                 <div id="adminLockScreen">
-                    <div class="info-text" style="margin-bottom: 15px;">
-                        🔒 This panel is restricted to admins only. Enter PIN to unlock.
+                    <div class="info-text" style="margin-bottom: 15px; text-align: center; padding: 20px;">
+                        🔒 This panel requires the app to be unlocked.<br><br>
+                        <span style="color: #666; font-size: 0.9em;">Use the "Unlock App" button above to access this feature.</span>
                     </div>
-                    <div class="form-group">
-                        <label>Admin PIN</label>
-                        <input type="password" id="adminPinInput" placeholder="Enter 4-digit PIN" maxlength="4" style="text-align: center; font-size: 1.2em; letter-spacing: 0.3em;">
-                    </div>
-                    <button class="btn" onclick="unlockAdminPanel()">🔓 Unlock</button>
                 </div>
 
                 <!-- Unlocked Admin Panel -->
@@ -3475,6 +3529,212 @@ CBAgQIAAAQIECBAgQIAAAQIECBAg0GmB/wdY0PR5GGbOggAAAABJRU5ErkJggg==" alt="Leeds" cl
                 <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🎯 Current Forfeits Holders</h3>
                 <div id="spakkaForfeits"></div>
             </div>
+        </div>
+
+        <!-- Voting Tab -->
+        <div id="voting" class="tab-content">
+            <h2 class="section-title">Player Voting</h2>
+
+            <!-- Last Night's Results -->
+            <div id="lastNightResults" class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0a1e4d 100%); color: white; display: none;">
+                <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center; font-size: 1.3em;">📊 Last Night's Results</h3>
+                <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5em;">🏆</div>
+                        <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Best Player</div>
+                        <div id="lastNightBest" style="font-size: 1.4em; font-weight: bold;">-</div>
+                        <div id="lastNightBestVotes" style="font-size: 0.85em; color: #ccc;"></div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5em;">💩</div>
+                        <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Worst Player</div>
+                        <div id="lastNightWorst" style="font-size: 1.4em; font-weight: bold;">-</div>
+                        <div id="lastNightWorstVotes" style="font-size: 0.85em; color: #ccc;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voting Status Banner -->
+            <div id="votingStatusBanner" class="card" style="text-align: center; padding: 15px;">
+                <div id="votingStatusText" style="font-size: 1.1em; font-weight: 600; color: #1D428A;"></div>
+                <div id="votingTimeRemaining" style="font-size: 0.9em; color: #666; margin-top: 5px;"></div>
+            </div>
+
+            <!-- Vote Summary (shown after voting) -->
+            <div id="voteSummaryCard" class="card" style="display: none; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-left: 4px solid #27ae60;">
+                <h3 style="margin-bottom: 15px; color: #155724; font-size: 1.2em;">✅ Your Vote Submitted</h3>
+                <div id="voteSummaryVoter" style="font-weight: 600; color: #1D428A; margin-bottom: 10px;"></div>
+                <div style="display: flex; justify-content: space-around; margin-bottom: 15px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5em;">🏆</div>
+                        <div style="font-size: 0.85em; color: #666;">Best</div>
+                        <div id="voteSummaryBest" style="font-weight: 600; color: #27ae60;"></div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5em;">💩</div>
+                        <div style="font-size: 0.85em; color: #666;">Worst</div>
+                        <div id="voteSummaryWorst" style="font-weight: 600; color: #e74c3c;"></div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="enableVoteEdit()" style="width: 100%;">✏️ Edit My Vote</button>
+            </div>
+
+            <!-- Voting Form -->
+            <div id="votingFormContainer" class="card">
+                <h3 id="votingFormTitle" style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">🗳️ Cast Your Vote</h3>
+
+                <div class="form-group">
+                    <label>Your Name *</label>
+                    <select id="votingVoterName" required onchange="checkExistingVote()">
+                        <option value="">Select your name...</option>
+                    </select>
+                </div>
+
+                <div id="votingChoicesContainer">
+                    <div class="form-group">
+                        <label>🏆 Best Player Tonight *</label>
+                        <select id="votingBestPlayer" required>
+                            <option value="">Select best player...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>💩 Worst Player Tonight *</label>
+                        <select id="votingWorstPlayer" required>
+                            <option value="">Select worst player...</option>
+                        </select>
+                    </div>
+
+                    <button id="submitVoteBtn" class="btn" onclick="submitVote()">Submit Vote</button>
+                    <button id="cancelEditBtn" class="btn btn-secondary" onclick="cancelVoteEdit()" style="display: none; margin-top: 10px;">Cancel</button>
+                </div>
+                <div id="voteValidationError" style="color: #e74c3c; text-align: center; margin-top: 10px; display: none;"></div>
+            </div>
+
+            <!-- Voting Closed Message -->
+            <div id="votingClosedMessage" class="card" style="display: none; text-align: center; padding: 30px;">
+                <div style="font-size: 3em; margin-bottom: 15px;">🌙</div>
+                <div style="font-size: 1.2em; font-weight: 600; color: #1D428A; margin-bottom: 10px;">Voting is Closed</div>
+                <div style="color: #666;">Voting opens daily at 6:00 AM</div>
+            </div>
+
+            <!-- Today's Live Standings -->
+            <div id="todayStandingsContainer" class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">📊 Today's Live Standings</h3>
+                <div id="todayVoteCount" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 0.95em;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <div style="text-align: center; font-weight: 600; color: #27ae60; margin-bottom: 10px;">🏆 Best Race</div>
+                        <div id="todayBestStandings" style="background: #f8fff8; border-radius: 8px; padding: 10px;"></div>
+                    </div>
+                    <div>
+                        <div style="text-align: center; font-weight: 600; color: #e74c3c; margin-bottom: 10px;">💩 Worst Race</div>
+                        <div id="todayWorstStandings" style="background: #fff8f8; border-radius: 8px; padding: 10px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- All-Time Leaderboard -->
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">🏅 All-Time Leaderboard</h3>
+                <div style="overflow-x: auto;">
+                    <table id="votingLeaderboard" style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 12px; background: #1D428A; color: #FFCD00;">Player</th>
+                                <th style="text-align: center; padding: 12px; background: #1D428A; color: #FFCD00;">🏆 Best</th>
+                                <th style="text-align: center; padding: 12px; background: #1D428A; color: #FFCD00;">💩 Worst</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody">
+                            <tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Admin Vote Management (visible when unlocked) -->
+            <div id="voteAdminSection" class="card" style="display: none; border-left: 4px solid #e74c3c;">
+                <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 1.2em;">🔓 Admin: Manage Votes</h3>
+
+                <div class="form-group">
+                    <label>Select Date</label>
+                    <input type="date" id="adminVoteDate" onchange="loadVotesForDate()">
+                </div>
+
+                <div id="adminVotesContainer">
+                    <div style="text-align: center; color: #666; padding: 20px;">Select a date to view votes</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Matches Tab -->
+        <div id="matches" class="tab-content">
+            <h2 class="section-title">Pro Clubs Matches</h2>
+
+            <div class="card" style="text-align: center; margin-bottom: 15px;">
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn" onclick="logNewMatches()" id="logMatchesBtn" style="background: #27ae60;">📥 Log New Matches</button>
+                    <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn">🔄 Refresh History</button>
+                </div>
+                <div id="matchesLastUpdated" style="font-size: 0.85em; color: #666; margin-top: 8px;"></div>
+                <div style="font-size: 0.8em; color: #888; margin-top: 4px;">Auto-logs daily at 1am • Manual log checks for new matches only</div>
+            </div>
+
+            <!-- Recent Matches Cards -->
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">⚽ Recent Matches</h3>
+                <div id="recentMatchesList" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="text-align: center; color: #666; padding: 20px;">Click "Log New Matches" to start logging</div>
+                </div>
+            </div>
+
+            <!-- Match History Table -->
+            <div class="card">
+                <h3 style="margin-bottom: 15px; color: #1D428A;">📋 Match History</h3>
+                <div style="overflow-x: auto;">
+                    <table id="matchHistoryTable" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Date</th>
+                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Result</th>
+                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Score</th>
+                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Opponent</th>
+                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Players & Ratings</th>
+                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">ANY Player</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matchHistoryBody">
+                            <tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No matches logged yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vote Edit Modal -->
+    <div id="voteEditModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeVoteEditModal()">&times;</span>
+            <div class="modal-header">Edit Vote</div>
+            <input type="hidden" id="editVoteDate">
+            <input type="hidden" id="editVoteVoter">
+            <div class="form-group">
+                <label>Voter</label>
+                <input type="text" id="editVoteVoterDisplay" disabled style="background: #f0f0f0;">
+            </div>
+            <div class="form-group">
+                <label>🏆 Best Player</label>
+                <select id="editVoteBest"></select>
+            </div>
+            <div class="form-group">
+                <label>💩 Worst Player</label>
+                <select id="editVoteWorst"></select>
+            </div>
+            <button class="btn" onclick="saveVoteEdit()">Save Changes</button>
+            <button class="btn btn-secondary" onclick="closeVoteEditModal()">Cancel</button>
         </div>
     </div>
 

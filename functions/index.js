@@ -7,6 +7,20 @@ const API_KEY = functions.config().football?.apikey || process.env.FOOTBALL_API_
 // Direct API-Football endpoint (not RapidAPI)
 const API_BASE_URL = 'https://v3.football.api-sports.io/';
 
+// EA Pro Clubs API configuration
+const EA_API_BASE_URL = 'https://proclubs.ea.com/api/fc/';
+const EA_CLUB_ID = '21853'; // Benidorm United
+const EA_PLATFORM = 'common-gen5'; // PS5/Xbox Series X|S
+
+// Headers to mimic browser request (required by EA's WAF)
+const EA_API_HEADERS = {
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Referer': 'https://www.ea.com/',
+  'Origin': 'https://www.ea.com'
+};
+
 // Admin PIN configuration
 // Set with: firebase functions:config:set admin.pin="YOUR_PIN"
 const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN || 'SquireyStu69!';
@@ -800,5 +814,468 @@ exports.deleteAllFines = functions.https.onCall(async (data, context) => {
     functions.logger.error('Error in deleteAllFines:', error);
     if (error instanceof functions.https.HttpsError) throw error;
     throw new functions.https.HttpsError('internal', `Failed to delete all fines: ${error.message}`);
+  }
+});
+
+// ==============================================
+// EA PRO CLUBS API FUNCTIONS
+// ==============================================
+
+/**
+ * Helper function to call EA Pro Clubs API
+ */
+async function callEaProClubsAPI(endpoint, params = {}) {
+  const queryString = new URLSearchParams(params).toString();
+  const url = `${EA_API_BASE_URL}${endpoint}${queryString ? '?' + queryString : ''}`;
+
+  functions.logger.info('Calling EA API:', url);
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: EA_API_HEADERS,
+    timeout: 10000
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    functions.logger.error('EA API error:', response.status, errorText);
+    throw new Error(`EA API request failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
+/**
+ * Get Pro Clubs Match History - HTTP trigger (public)
+ * Returns recent matches with scores and player stats
+ */
+exports.getProClubsMatches = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const matchType = req.query.matchType || req.body?.matchType || 'leagueMatch';
+    const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
+
+    functions.logger.info(`Fetching Pro Clubs matches for club ${clubId}, type: ${matchType}`);
+
+    const data = await callEaProClubsAPI('clubs/matches', {
+      platform: EA_PLATFORM,
+      clubIds: clubId,
+      matchType: matchType,
+      maxResultCount: 10
+    });
+
+    // Transform the response to a cleaner format
+    const matches = [];
+
+    if (data && Array.isArray(data)) {
+      for (const match of data) {
+        // Find our club and opponent in the match data
+        const clubs = match.clubs || {};
+        const clubIds = Object.keys(clubs);
+
+        let ourClub = null;
+        let opponentClub = null;
+
+        for (const id of clubIds) {
+          if (id === clubId) {
+            ourClub = { id, ...clubs[id] };
+          } else {
+            opponentClub = { id, ...clubs[id] };
+          }
+        }
+
+        // Get player stats for our club
+        const players = match.players || {};
+        const ourPlayers = players[clubId] || {};
+
+        const playerStats = Object.entries(ourPlayers).map(([playerId, stats]) => ({
+          playerId,
+          name: stats.playername || 'Unknown',
+          position: stats.pos || 'ANY',
+          rating: parseFloat(stats.rating) || 0,
+          goals: parseInt(stats.goals) || 0,
+          assists: parseInt(stats.assists) || 0,
+          mom: stats.mom === '1' // Man of the match
+        }));
+
+        matches.push({
+          matchId: match.matchId,
+          timestamp: match.timestamp ? new Date(parseInt(match.timestamp) * 1000).toISOString() : null,
+          matchType: matchType,
+          result: ourClub ? (
+            parseInt(ourClub.goals) > parseInt(opponentClub?.goals || 0) ? 'WIN' :
+            parseInt(ourClub.goals) < parseInt(opponentClub?.goals || 0) ? 'LOSS' : 'DRAW'
+          ) : 'UNKNOWN',
+          ourScore: ourClub ? parseInt(ourClub.goals) || 0 : 0,
+          opponentScore: opponentClub ? parseInt(opponentClub.goals) || 0 : 0,
+          ourClubName: ourClub?.details?.name || 'Benidorm United',
+          opponentClubName: opponentClub?.details?.name || 'Unknown',
+          players: playerStats.sort((a, b) => b.rating - a.rating)
+        });
+      }
+    }
+
+    sendResponse(res, 200, {
+      clubId,
+      matchType,
+      matchCount: matches.length,
+      matches
+    });
+
+  } catch (error) {
+    functions.logger.error('getProClubsMatches error:', error.message);
+    sendError(res, 500, 'internal', `Failed to fetch Pro Clubs matches: ${error.message}`);
+  }
+});
+
+/**
+ * Get Pro Clubs Squad - HTTP trigger (public)
+ * Returns squad members with stats and ratings
+ */
+exports.getProClubsSquad = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
+
+    functions.logger.info(`Fetching Pro Clubs squad for club ${clubId}`);
+
+    const data = await callEaProClubsAPI('members/stats', {
+      platform: EA_PLATFORM,
+      clubId: clubId
+    });
+
+    // Transform the response
+    const members = [];
+
+    if (data && data.members && Array.isArray(data.members)) {
+      for (const member of data.members) {
+        members.push({
+          name: member.name || 'Unknown',
+          gamesPlayed: parseInt(member.gamesPlayed) || 0,
+          goals: parseInt(member.goals) || 0,
+          assists: parseInt(member.assists) || 0,
+          cleanSheets: parseInt(member.cleanSheetsDef) || parseInt(member.cleanSheetsGK) || 0,
+          winRate: member.gamesPlayed > 0
+            ? Math.round((parseInt(member.wins) || 0) / parseInt(member.gamesPlayed) * 100)
+            : 0,
+          favoritePosition: member.favoritePosition || 'ANY',
+          proOverall: parseInt(member.proOverall) || 0,
+          proHeight: member.proHeight || null,
+          manOfTheMatch: parseInt(member.manOfTheMatch) || 0
+        });
+      }
+    }
+
+    sendResponse(res, 200, {
+      clubId,
+      memberCount: members.length,
+      members: members.sort((a, b) => b.gamesPlayed - a.gamesPlayed)
+    });
+
+  } catch (error) {
+    functions.logger.error('getProClubsSquad error:', error.message);
+    sendError(res, 500, 'internal', `Failed to fetch Pro Clubs squad: ${error.message}`);
+  }
+});
+
+/**
+ * Get Pro Clubs Club Info - HTTP trigger (public)
+ * Returns club details and overall stats
+ */
+exports.getProClubsInfo = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
+
+    functions.logger.info(`Fetching Pro Clubs info for club ${clubId}`);
+
+    const data = await callEaProClubsAPI('clubs/info', {
+      platform: EA_PLATFORM,
+      clubIds: clubId
+    });
+
+    // The response is keyed by club ID
+    const clubData = data && data[clubId] ? data[clubId] : null;
+
+    if (!clubData) {
+      return sendError(res, 404, 'not-found', 'Club not found');
+    }
+
+    sendResponse(res, 200, {
+      clubId,
+      name: clubData.name || 'Unknown',
+      wins: parseInt(clubData.wins) || 0,
+      losses: parseInt(clubData.losses) || 0,
+      ties: parseInt(clubData.ties) || 0,
+      gamesPlayed: parseInt(clubData.gamesPlayed) || 0,
+      goals: parseInt(clubData.goals) || 0,
+      goalsAgainst: parseInt(clubData.goalsAgainst) || 0,
+      skillRating: parseInt(clubData.skillRating) || 0,
+      divisionRank: parseInt(clubData.divisionRank) || 0,
+      currentDivision: parseInt(clubData.currentDivision) || 0
+    });
+
+  } catch (error) {
+    functions.logger.error('getProClubsInfo error:', error.message);
+    sendError(res, 500, 'internal', `Failed to fetch Pro Clubs info: ${error.message}`);
+  }
+});
+
+// ==============================================
+// PRO CLUBS MATCH LOGGING FUNCTIONS
+// ==============================================
+
+/**
+ * Helper function to fetch matches from EA and log new ones to Firestore
+ * Returns count of new matches logged
+ */
+async function fetchAndLogNewMatches() {
+  const clubId = EA_CLUB_ID;
+
+  // Fetch latest matches from EA
+  const data = await callEaProClubsAPI('clubs/matches', {
+    platform: EA_PLATFORM,
+    clubIds: clubId,
+    matchType: 'leagueMatch',
+    maxResultCount: 10
+  });
+
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    functions.logger.info('No matches returned from EA API');
+    return { logged: 0, skipped: 0 };
+  }
+
+  let logged = 0;
+  let skipped = 0;
+
+  for (const match of data) {
+    const matchId = match.matchId;
+
+    // Check if match already exists in Firestore
+    const existingDoc = await db.collection('proClubsMatches').doc(matchId).get();
+
+    if (existingDoc.exists) {
+      skipped++;
+      continue; // Skip duplicate
+    }
+
+    // Parse match data
+    const clubs = match.clubs || {};
+    const clubIds = Object.keys(clubs);
+
+    let ourClub = null;
+    let opponentClub = null;
+
+    for (const id of clubIds) {
+      if (id === clubId) {
+        ourClub = { id, ...clubs[id] };
+      } else {
+        opponentClub = { id, ...clubs[id] };
+      }
+    }
+
+    // Get player stats for our club
+    const players = match.players || {};
+    const ourPlayers = players[clubId] || {};
+
+    // Log first player's raw stats for debugging (only once)
+    if (logged === 0 && Object.keys(ourPlayers).length > 0) {
+      const firstPlayer = Object.values(ourPlayers)[0];
+      functions.logger.info('Sample player raw stats:', JSON.stringify(firstPlayer));
+    }
+
+    const playerStats = Object.entries(ourPlayers).map(([playerId, stats]) => ({
+      playerId,
+      name: stats.playername || 'Unknown',
+      position: stats.pos || 'ANY',
+      rating: parseFloat(stats.rating) || 0,
+      mom: stats.mom === '1'
+    }));
+
+    // Determine result
+    const ourScore = ourClub ? parseInt(ourClub.goals) || 0 : 0;
+    const opponentScore = opponentClub ? parseInt(opponentClub.goals) || 0 : 0;
+    const result = ourScore > opponentScore ? 'WIN' :
+                   ourScore < opponentScore ? 'LOSS' : 'DRAW';
+
+    // Save to Firestore
+    await db.collection('proClubsMatches').doc(matchId).set({
+      matchId,
+      timestamp: match.timestamp ? new Date(parseInt(match.timestamp) * 1000) : null,
+      result,
+      ourScore,
+      opponentScore,
+      opponentName: opponentClub?.details?.name || 'Unknown',
+      players: playerStats,
+      loggedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    logged++;
+    functions.logger.info(`Logged match ${matchId}: ${result} ${ourScore}-${opponentScore} vs ${opponentClub?.details?.name}`);
+  }
+
+  return { logged, skipped };
+}
+
+/**
+ * Scheduled function - runs at 1am UK time daily
+ * Fetches latest matches and logs new ones
+ */
+exports.scheduledMatchLog = functions.pubsub
+  .schedule('0 1 * * *')
+  .timeZone('Europe/London')
+  .onRun(async (context) => {
+    functions.logger.info('Running scheduled match log at 1am UK time');
+
+    try {
+      const result = await fetchAndLogNewMatches();
+      functions.logger.info(`Scheduled log complete: ${result.logged} new, ${result.skipped} duplicates skipped`);
+      return null;
+    } catch (error) {
+      functions.logger.error('Scheduled match log failed:', error.message);
+      throw error;
+    }
+  });
+
+/**
+ * Manual match log - HTTP trigger
+ * Fetches latest matches and logs new ones (same logic, manual trigger)
+ */
+exports.logProClubsMatches = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    functions.logger.info('Manual match log triggered');
+
+    const result = await fetchAndLogNewMatches();
+
+    sendResponse(res, 200, {
+      success: true,
+      logged: result.logged,
+      skipped: result.skipped,
+      message: `Logged ${result.logged} new matches, skipped ${result.skipped} duplicates`
+    });
+
+  } catch (error) {
+    functions.logger.error('Manual match log failed:', error.message);
+    sendError(res, 500, 'internal', `Failed to log matches: ${error.message}`);
+  }
+});
+
+/**
+ * Clear and re-log all matches (to update with new fields like position)
+ */
+exports.relogAllMatches = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    functions.logger.info('Clearing and re-logging all matches...');
+
+    // Delete all existing logged matches
+    const snapshot = await db.collection('proClubsMatches').get();
+    const batch = db.batch();
+    snapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+    functions.logger.info(`Deleted ${snapshot.size} existing matches`);
+
+    // Re-log matches
+    const result = await fetchAndLogNewMatches();
+
+    sendResponse(res, 200, {
+      success: true,
+      deleted: snapshot.size,
+      logged: result.logged,
+      message: `Deleted ${snapshot.size} old matches, logged ${result.logged} matches with updated fields`
+    });
+
+  } catch (error) {
+    functions.logger.error('relogAllMatches error:', error.message);
+    sendError(res, 500, 'internal', `Failed to re-log matches: ${error.message}`);
+  }
+});
+
+/**
+ * Get logged match history from Firestore
+ * Returns all stored matches, sorted by timestamp descending
+ */
+exports.getLoggedMatches = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const limitParam = parseInt(req.query.limit) || 50;
+
+    const snapshot = await db.collection('proClubsMatches')
+      .orderBy('timestamp', 'desc')
+      .limit(limitParam)
+      .get();
+
+    const matches = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      matches.push({
+        matchId: data.matchId,
+        timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null,
+        result: data.result,
+        ourScore: data.ourScore,
+        opponentScore: data.opponentScore,
+        opponentName: data.opponentName,
+        players: data.players || [],
+        anyPlayer: data.anyPlayer || null
+      });
+    });
+
+    sendResponse(res, 200, {
+      matchCount: matches.length,
+      matches
+    });
+
+  } catch (error) {
+    functions.logger.error('getLoggedMatches error:', error.message);
+    sendError(res, 500, 'internal', `Failed to get logged matches: ${error.message}`);
+  }
+});
+
+/**
+ * Update the ANY player for a specific match
+ * Sets who was controlling the AI players during that match
+ */
+exports.updateMatchAnyPlayer = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const { matchId, anyPlayer } = req.body.data || {};
+
+    if (!matchId) {
+      return sendError(res, 400, 'invalid-argument', 'matchId is required');
+    }
+
+    const matchRef = db.collection('proClubsMatches').doc(matchId);
+    const matchDoc = await matchRef.get();
+
+    if (!matchDoc.exists) {
+      return sendError(res, 404, 'not-found', `Match ${matchId} not found`);
+    }
+
+    await matchRef.update({
+      anyPlayer: anyPlayer || null
+    });
+
+    functions.logger.info(`Updated match ${matchId} ANY player to: ${anyPlayer || 'none'}`);
+
+    sendResponse(res, 200, {
+      success: true,
+      matchId,
+      anyPlayer: anyPlayer || null
+    });
+
+  } catch (error) {
+    functions.logger.error('updateMatchAnyPlayer error:', error.message);
+    sendError(res, 500, 'internal', `Failed to update match: ${error.message}`);
   }
 });

@@ -1,6 +1,5 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -13,7 +12,32 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const functions = getFunctions(app);
+
+        // App version - UPDATE THESE BEFORE EACH DEPLOY
+        const APP_VERSION = 'v2.9.0';
+        const LAST_UPDATED = '29 Jan 2026';
+
+        // Cloud Functions base URL
+        const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
+
+        // Helper to call HTTP Cloud Functions
+        async function callFunction(functionName, data) {
+            const response = await fetch(`${FUNCTIONS_URL}/${functionName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (result.error) {
+                const error = new Error(result.error.message);
+                error.code = result.error.code;
+                throw error;
+            }
+
+            return result;
+        }
 
         let fineReasons = [
             { reason: "10 minutes late", amount: 2.00 },
@@ -50,6 +74,10 @@
         let currentPaidFineId = null;
         let currentDateRangeFilter = 'all';
 
+        // Initialize date range filter variables
+        window.dateRangeStart = null;
+        window.dateRangeEnd = null;
+
         // FIRESTORE PERFORMANCE OPTIMIZATION
         // To prevent excessive reads (~89K/day on free tier), we:
         // 1. Limit realtime listeners to recent data only (200 fines, 50 baton)
@@ -63,6 +91,18 @@
         let didInit = false; // Prevent multiple init() calls
         let activeListenerCount = 0; // Track active snapshot listeners
         const isDevMode = new URLSearchParams(window.location.search).get('dev') === '1';
+
+        // VOTING SYSTEM
+        // Stores daily votes and leaderboard data
+        let todayVotes = {}; // { odterId: { best: playerId, worst: playerId } }
+        let allTimeVoteTotals = {}; // { playerId: { best: number, worst: number } }
+        let lastNightResults = null; // { best: { name, votes }, worst: { name, votes } }
+        let votingUnsubscribe = null; // Realtime listener for today's votes
+
+        // Voting hours: 6am - 11:59pm
+        const VOTING_OPEN_HOUR = 6;
+        const VOTING_CLOSE_HOUR = 23;
+        const VOTING_CLOSE_MINUTE = 59;
 
         // ADMIN PASSWORD MANAGEMENT
         // Single unlock in Settings - then all edits work until locked/session ends
@@ -93,6 +133,11 @@
                     lockStatus.innerHTML = '<span style="color: #C8102E; font-weight: 600;">🔒 App Locked - View Only Mode</span>';
                 }
             }
+
+            // Update vote admin section visibility
+            if (typeof updateVoteAdminSection === 'function') {
+                updateVoteAdminSection();
+            }
         }
 
         // Unlock app with password
@@ -109,12 +154,14 @@
                 sessionStorage.setItem('adminPassword', password);
                 isAppUnlocked = true;
                 updateLockStatus();
+                updateAdminPanelVisibility();
                 showToast('App unlocked! You can now edit.', 'success');
             } catch (error) {
                 adminPassword = null;
                 sessionStorage.removeItem('adminPassword');
                 isAppUnlocked = false;
                 updateLockStatus();
+                updateAdminPanelVisibility();
                 showToast('Failed to unlock app', 'error');
             }
         }
@@ -125,6 +172,7 @@
             sessionStorage.removeItem('adminPassword');
             isAppUnlocked = false;
             updateLockStatus();
+            updateAdminPanelVisibility();
             showToast('App locked. View-only mode.', 'info');
         }
 
@@ -194,19 +242,18 @@
         }
 
         // ADMIN TEAM ID FINDER
-        // Simple PIN-based admin authentication
-        let isAdminAuthenticated = false;
-        const ADMIN_PIN = '1234'; // CHANGE THIS to your preferred PIN
-
-        function unlockAdminPanel() {
-            const inputPin = document.getElementById('adminPinInput').value;
-            if (inputPin === ADMIN_PIN) {
-                isAdminAuthenticated = true;
-                document.getElementById('adminLockScreen').style.display = 'none';
-                document.getElementById('adminUnlockedPanel').style.display = 'block';
-                showToast('Admin panel unlocked', 'success');
-            } else {
-                showToast('Incorrect PIN', 'error');
+        // Uses main app unlock - no separate PIN needed
+        function updateAdminPanelVisibility() {
+            const lockScreen = document.getElementById('adminLockScreen');
+            const unlockedPanel = document.getElementById('adminUnlockedPanel');
+            if (lockScreen && unlockedPanel) {
+                if (isAppUnlocked) {
+                    lockScreen.style.display = 'none';
+                    unlockedPanel.style.display = 'block';
+                } else {
+                    lockScreen.style.display = 'block';
+                    unlockedPanel.style.display = 'none';
+                }
             }
         }
 
@@ -226,8 +273,7 @@
 
             try {
                 const password = await getAdminPassword('searching teams');
-                const searchTeams = httpsCallable(functions, 'searchTeams');
-                const result = await searchTeams({ query, adminPassword: password });
+                const result = await callFunction('searchTeams', { query, adminPassword: password });
 
                 teamSearchResults = result.data || [];
 
@@ -266,9 +312,11 @@
 
             } catch (error) {
                 console.error('Error searching teams:', error);
-                handlePermissionError(error, 'searching teams');
-                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams. Make sure Cloud Functions are deployed.</div>';
+                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams: ' + error.message + '</div>';
                 showToast('Search failed: ' + error.message, 'error');
+                if (error.code === 'functions/permission-denied') {
+                    handlePermissionError(error, 'searching teams');
+                }
             }
         }
 
@@ -289,8 +337,8 @@
                     createdAt: new Date().toISOString()
                 };
 
-                const saveTeamFunc = httpsCallable(functions, 'saveTeam');
-                await saveTeamFunc({ team: teamData, adminPassword: password });
+                
+                await callFunction('saveTeam', { team: teamData, adminPassword: password });
 
                 hideLoading();
                 showToast(`${team.teamName} saved to known teams`, 'success');
@@ -325,8 +373,7 @@
                     updatedBy: 'admin'
                 };
 
-                const setBatonHolderFunc = httpsCallable(functions, 'setBatonHolder');
-                await setBatonHolderFunc({ holder: holderData, adminPassword: password });
+                await callFunction('setBatonHolder', { holder: holderData, adminPassword: password });
 
                 // Also save to known teams
                 await saveToKnownTeams(index);
@@ -343,113 +390,322 @@
         }
 
         // MANUAL BATON UPDATE
-        // Checks latest match result and moves baton if holder lost
-        let isUpdatingBaton = false;
+        // Manual match result entry
+        let selectedMatchResult = null;
 
-        async function manualUpdateBaton() {
-            if (isUpdatingBaton) {
-                showToast('Baton update already in progress', 'info');
+        function selectMatchResult(result) {
+            if (!isAppUnlocked || !adminPassword) {
+                showToast('Please unlock app in Settings first', 'error');
                 return;
             }
 
-            if (!isAdminAuthenticated) {
-                showToast('Please unlock admin panel first', 'error');
+            selectedMatchResult = result;
+
+            // Update button styles
+            document.getElementById('btnWin').style.opacity = result === 'win' ? '1' : '0.5';
+            document.getElementById('btnDraw').style.opacity = result === 'draw' ? '1' : '0.5';
+            document.getElementById('btnLoss').style.opacity = result === 'loss' ? '1' : '0.5';
+
+            // Show details section
+            document.getElementById('matchDetailsSection').style.display = 'block';
+
+            // Show/hide opponent section based on result
+            document.getElementById('opponentSection').style.display = result === 'loss' ? 'block' : 'none';
+
+            // Update holder name in score label
+            if (currentBatonHolder) {
+                document.getElementById('holderScoreLabel').textContent = currentBatonHolder.holderTeamName || 'Holder';
+            }
+        }
+
+        async function submitMatchResult() {
+            if (!selectedMatchResult) {
+                showToast('Please select Win, Draw, or Loss first', 'error');
+                return;
+            }
+
+            if (!currentBatonHolder) {
+                showToast('No baton holder set. Use Team ID Finder first.', 'error');
+                return;
+            }
+
+            const holderScore = parseInt(document.getElementById('holderScore').value) || 0;
+            const opponentScore = parseInt(document.getElementById('opponentScore').value) || 0;
+            const opponentName = document.getElementById('opponentName').value.trim();
+            const opponentTeamId = document.getElementById('opponentTeamId').value.trim() || null;
+            const opponentLogo = document.getElementById('opponentLogo').value.trim() || null;
+            const competitionName = document.getElementById('competitionName').value.trim() || 'Unknown Competition';
+
+            // Validate opponent name if lost
+            if (selectedMatchResult === 'loss' && !opponentName) {
+                showToast('Please enter the opponent team name', 'error');
+                return;
+            }
+
+            // Validate score matches result
+            if (selectedMatchResult === 'win' && holderScore <= opponentScore) {
+                showToast('Score doesn\'t match a win - holder should have more goals', 'error');
+                return;
+            }
+            if (selectedMatchResult === 'loss' && holderScore >= opponentScore) {
+                showToast('Score doesn\'t match a loss - holder should have fewer goals', 'error');
+                return;
+            }
+            if (selectedMatchResult === 'draw' && holderScore !== opponentScore) {
+                showToast('Score doesn\'t match a draw - scores should be equal', 'error');
                 return;
             }
 
             try {
-                isUpdatingBaton = true;
+                showLoading('Recording match result...');
+                const password = await getAdminPassword('recording match');
 
-                // Update UI to show loading state
-                const updateBtn = document.getElementById('updateBatonBtn');
-                if (updateBtn) {
-                    updateBtn.disabled = true;
-                    updateBtn.innerHTML = '⏳ Checking latest match...';
+                const holderTeamName = currentBatonHolder.holderTeamName;
+                const holderTeamId = currentBatonHolder.holderTeamId;
+                const batonMoved = selectedMatchResult === 'loss';
+
+                // Create history record
+                const historyEntry = {
+                    previousHolderTeamId: holderTeamId,
+                    previousHolderTeamName: holderTeamName,
+                    newHolderTeamId: batonMoved ? opponentTeamId : holderTeamId,
+                    newHolderTeamName: batonMoved ? opponentName : holderTeamName,
+                    matchDate: new Date().toISOString(),
+                    competitionName: competitionName,
+                    homeTeamName: holderTeamName,
+                    awayTeamName: opponentName || 'Opponent',
+                    homeScore: holderScore,
+                    awayScore: opponentScore,
+                    outcomeForHolder: selectedMatchResult.toUpperCase(),
+                    batonMoved: batonMoved,
+                    reason: batonMoved
+                        ? `${holderTeamName} lost ${holderScore}-${opponentScore}. Baton moves to ${opponentName}.`
+                        : `${holderTeamName} ${selectedMatchResult === 'win' ? 'won' : 'drew'} ${holderScore}-${opponentScore}. Baton stays.`,
+                    timestamp: new Date().toISOString(),
+                    entryType: 'manual'
+                };
+
+                // Add to baton history
+                await callFunction('addBatonEntry', { entry: historyEntry, adminPassword: password });
+
+                // If baton moved, update current holder
+                if (batonMoved) {
+                    const newHolder = {
+                        holderTeamId: opponentTeamId,
+                        holderTeamName: opponentName,
+                        holderCountry: 'Unknown',
+                        holderCity: null,
+                        holderLogo: opponentLogo,
+                        lastUpdatedAt: new Date().toISOString(),
+                        updatedBy: 'manual'
+                    };
+                    await callFunction('setBatonHolder', { holder: newHolder, adminPassword: password });
                 }
-
-                showLoading('Checking latest match result...');
-
-                // Call Cloud Function
-                const password = await getAdminPassword('updating baton');
-                const updateBaton = httpsCallable(functions, 'updateBaton');
-                const result = await updateBaton({ adminPassword: password });
 
                 hideLoading();
 
-                const data = result.data;
-
-                // Display result based on status
-                if (data.status === 'moved') {
-                    // Baton moved - show detailed message
-                    const msg = `
-🍺 BATON MOVED! 🍺
-
-${data.previousHolder} → ${data.newHolder}
-
-Match: ${data.match.home} ${data.match.score} ${data.match.away}
-Competition: ${data.match.competition}
-
-${data.reason}
-                    `.trim();
-
-                    alert(msg);
-                    showToast(`Baton moved to ${data.newHolder}!`, 'success');
-
-                } else if (data.status === 'stayed') {
-                    // Baton stayed
-                    const msg = `
-🍺 BATON STAYED 🍺
-
-Holder: ${data.holder}
-
-Match: ${data.match.home} ${data.match.score} ${data.match.away}
-Competition: ${data.match.competition}
-
-${data.reason}
-                    `.trim();
-
-                    alert(msg);
-                    showToast(`Baton stayed with ${data.holder}`, 'info');
-
+                // Show result message
+                if (batonMoved) {
+                    showToast(`🍺 Baton moved to ${opponentName}!`, 'success');
+                    alert(`🍺 BATON MOVED!\n\n${holderTeamName} ${holderScore}-${opponentScore} ${opponentName}\n\nBaton now with: ${opponentName}`);
                 } else {
-                    // No update
-                    alert(data.message);
-                    showToast(data.message, 'info');
+                    showToast(`Baton stays with ${holderTeamName}`, 'info');
+                    alert(`🍺 BATON STAYED\n\n${holderTeamName} ${holderScore}-${opponentScore} ${opponentName || 'Opponent'}\n\nBaton stays with: ${holderTeamName}`);
                 }
 
-                // Refresh baton display
+                // Reset form
+                selectedMatchResult = null;
+                document.getElementById('matchDetailsSection').style.display = 'none';
+                document.getElementById('holderScore').value = '0';
+                document.getElementById('opponentScore').value = '0';
+                document.getElementById('opponentName').value = '';
+                document.getElementById('opponentTeamId').value = '';
+                document.getElementById('opponentLogo').value = '';
+                document.getElementById('competitionName').value = '';
+                document.getElementById('btnWin').style.opacity = '1';
+                document.getElementById('btnDraw').style.opacity = '1';
+                document.getElementById('btnLoss').style.opacity = '1';
+                // Reset opponent search
+                document.getElementById('opponentSection').style.display = 'none';
+                document.getElementById('opponentSearchInput').value = '';
+                document.getElementById('opponentSearchResults').innerHTML = '';
+                document.getElementById('selectedOpponent').style.display = 'none';
+
+                // Refresh displays
                 await loadBatonHolder();
                 updateBatonTracker();
-                updateSpakkaTab();
 
             } catch (error) {
-                console.error('Error updating baton:', error);
+                console.error('Error recording match:', error);
                 hideLoading();
-
-                handlePermissionError(error, 'updating baton');
-
-                let errorMsg = 'Failed to update baton';
-                if (error.code === 'functions/permission-denied') {
-                    errorMsg = 'Invalid admin password';
-                } else if (error.code === 'functions/not-found') {
-                    errorMsg = 'No baton holder set. Use Team ID Finder first.';
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
-
-                alert('❌ Error: ' + errorMsg);
-                showToast(errorMsg, 'error');
-
-            } finally {
-                isUpdatingBaton = false;
-
-                // Reset button
-                const updateBtn = document.getElementById('updateBatonBtn');
-                if (updateBtn) {
-                    updateBtn.disabled = false;
-                    updateBtn.innerHTML = '🔄 Update Baton';
-                }
+                handlePermissionError(error, 'recording match');
+                showToast('Failed to record match: ' + error.message, 'error');
             }
+        }
+
+        // Update holder name in form when baton tab loads
+        function updateMatchFormHolder() {
+            const holderSpan = document.getElementById('holderNameInForm');
+            if (holderSpan && currentBatonHolder) {
+                holderSpan.textContent = currentBatonHolder.holderTeamName || 'the holder';
+            }
+        }
+
+        // Add historical baton entry (for backfilling)
+        async function addHistoricalEntry() {
+            if (!isAppUnlocked || !adminPassword) {
+                showToast('Please unlock app in Settings first', 'error');
+                return;
+            }
+
+            const matchDate = document.getElementById('historyDate').value;
+            const fromTeam = document.getElementById('historyFromTeam').value.trim();
+            const toTeam = document.getElementById('historyToTeam').value.trim();
+            const fromScore = parseInt(document.getElementById('historyFromScore').value) || 0;
+            const toScore = parseInt(document.getElementById('historyToScore').value) || 0;
+            const competition = document.getElementById('historyCompetition').value.trim();
+
+            if (!matchDate) {
+                showToast('Please select a date', 'error');
+                return;
+            }
+            if (!fromTeam) {
+                showToast('Please enter the previous holder', 'error');
+                return;
+            }
+            if (!toTeam) {
+                showToast('Please enter the new holder', 'error');
+                return;
+            }
+            if (toScore <= fromScore) {
+                showToast('Winner score must be higher than loser score', 'error');
+                return;
+            }
+
+            try {
+                showLoading('Adding historical entry...');
+                const password = await getAdminPassword('adding historical entry');
+
+                const historyEntry = {
+                    previousHolderTeamId: null,
+                    previousHolderTeamName: fromTeam,
+                    newHolderTeamId: null,
+                    newHolderTeamName: toTeam,
+                    matchDate: matchDate,
+                    competitionName: competition || 'Unknown Competition',
+                    homeTeamName: fromTeam,
+                    awayTeamName: toTeam,
+                    homeScore: fromScore,
+                    awayScore: toScore,
+                    outcomeForHolder: 'LOSS',
+                    batonMoved: true,
+                    reason: `${fromTeam} lost ${fromScore}-${toScore} to ${toTeam}. Baton transferred.`,
+                    timestamp: new Date(matchDate).toISOString(),
+                    entryType: 'historical'
+                };
+
+                await callFunction('addBatonEntry', { entry: historyEntry, adminPassword: password });
+
+                hideLoading();
+                showToast('Historical entry added!', 'success');
+
+                // Reset form
+                document.getElementById('historyDate').value = '';
+                document.getElementById('historyFromTeam').value = '';
+                document.getElementById('historyToTeam').value = '';
+                document.getElementById('historyFromScore').value = '0';
+                document.getElementById('historyToScore').value = '0';
+                document.getElementById('historyCompetition').value = '';
+
+                // Refresh baton tracker
+                updateBatonTracker();
+
+            } catch (error) {
+                console.error('Error adding historical entry:', error);
+                hideLoading();
+                handlePermissionError(error, 'adding historical entry');
+                showToast('Failed to add entry: ' + error.message, 'error');
+            }
+        }
+
+        // Opponent team search functions
+        async function searchOpponentTeam() {
+            if (!isAppUnlocked || !adminPassword) {
+                showToast('Please unlock app in Settings first', 'error');
+                return;
+            }
+
+            const searchInput = document.getElementById('opponentSearchInput');
+            const resultsDiv = document.getElementById('opponentSearchResults');
+            const searchQuery = searchInput.value.trim();
+
+            if (searchQuery.length < 2) {
+                resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">Enter at least 2 characters to search</p>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">Searching...</p>';
+
+            try {
+                const result = await callFunction('searchTeams', { query: searchQuery, adminPassword });
+                const teams = result.data || [];
+
+                if (teams.length === 0) {
+                    resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">No teams found</p>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = teams.map(team => `
+                    <div onclick="selectOpponentTeam(${JSON.stringify(team).replace(/"/g, '&quot;')})"
+                         style="display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s;"
+                         onmouseover="this.style.background='#f5f5f5'"
+                         onmouseout="this.style.background='white'">
+                        ${team.logo ? `<img src="${team.logo}" style="width: 30px; height: 30px; border-radius: 4px;">` : ''}
+                        <div>
+                            <div style="font-weight: 600;">${team.teamName}</div>
+                            <div style="font-size: 0.8em; color: #666;">${team.country}${team.city ? ` • ${team.city}` : ''}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error searching opponent teams:', error);
+                resultsDiv.innerHTML = `<p style="color: #C8102E; padding: 10px;">Error: ${error.message}</p>`;
+            }
+        }
+
+        function selectOpponentTeam(team) {
+            // Store in hidden fields
+            document.getElementById('opponentName').value = team.teamName;
+            document.getElementById('opponentTeamId').value = team.teamId;
+            document.getElementById('opponentLogo').value = team.logo || '';
+
+            // Show selected team
+            const selectedDiv = document.getElementById('selectedOpponent');
+            const logoImg = document.getElementById('selectedOpponentLogo');
+            const nameSpan = document.getElementById('selectedOpponentName');
+
+            nameSpan.textContent = team.teamName;
+            if (team.logo) {
+                logoImg.src = team.logo;
+                logoImg.style.display = 'block';
+            } else {
+                logoImg.style.display = 'none';
+            }
+            selectedDiv.style.display = 'block';
+
+            // Clear search results
+            document.getElementById('opponentSearchResults').innerHTML = '';
+            document.getElementById('opponentSearchInput').value = '';
+        }
+
+        function clearSelectedOpponent() {
+            document.getElementById('opponentName').value = '';
+            document.getElementById('opponentTeamId').value = '';
+            document.getElementById('opponentLogo').value = '';
+            document.getElementById('selectedOpponent').style.display = 'none';
+            document.getElementById('selectedOpponentName').textContent = '';
+            document.getElementById('selectedOpponentLogo').src = '';
         }
 
         // Load and display current baton holder from Firestore
@@ -469,6 +725,8 @@ ${data.reason}
                 });
 
                 updateBatonHolderDisplay();
+                updateMatchFormHolder();
+                updateSpakkaTab();
 
             } catch (error) {
                 console.error('Error loading baton holder:', error);
@@ -526,9 +784,10 @@ ${data.reason}
         window.exportData = exportData;
         window.exportPDF = exportPDF;
         window.exportWhatsApp = exportWhatsApp;
-        window.manualUpdateBaton = manualUpdateBaton;
+        window.selectMatchResult = selectMatchResult;
+        window.submitMatchResult = submitMatchResult;
         window.loadBatonHolder = loadBatonHolder;
-        window.unlockAdminPanel = unlockAdminPanel;
+        window.updateAdminPanelVisibility = updateAdminPanelVisibility;
         window.searchTeamsAdmin = searchTeamsAdmin;
         window.saveToKnownTeams = saveToKnownTeams;
         window.setAsBatonHolder = setAsBatonHolder;
@@ -545,12 +804,17 @@ ${data.reason}
         window.editFineReason = editFineReason;
         window.deleteFineReason = deleteFineReason;
         window.deleteBatonEntry = deleteBatonEntry;
+        window.addHistoricalEntry = addHistoricalEntry;
         window.markAllPaid = markAllPaid;
         window.markAllPaidSettings = markAllPaidSettings;
         window.closeMarkAllModal = closeMarkAllModal;
         window.confirmMarkAllPaid = confirmMarkAllPaid;
         window.deletePlayerFromSettings = deletePlayerFromSettings;
         window.updateGamesField = updateGamesField;
+        window.searchOpponentTeam = searchOpponentTeam;
+        window.selectOpponentTeam = selectOpponentTeam;
+        window.clearSelectedOpponent = clearSelectedOpponent;
+        window.updatePlayerComparison = updatePlayerComparison;
 
         function formatDateDDMMYYYY(dateStr) {
             if (!dateStr) return '';
@@ -595,6 +859,30 @@ ${data.reason}
             console.log('✅ Loading fine reasons...');
             loadBatonHolder();
             console.log('✅ Loading baton holder...');
+            initializeVoting();
+            console.log('✅ Voting system initialized...');
+
+            // Load Pro Clubs match history and player mappings
+            loadLoggedMatches().then(() => {
+                loadPlayerMappings();
+                console.log('✅ Match history and player mappings loaded...');
+            });
+
+            // Restore last tab
+            const lastTab = localStorage.getItem('lastTab');
+            if (lastTab && document.getElementById(lastTab)) {
+                switchTab(lastTab);
+                console.log('✅ Restored last tab:', lastTab);
+            }
+
+            // Update version display
+            const versionEl = document.getElementById('appVersion');
+            const updatedEl = document.getElementById('lastUpdated');
+            if (versionEl) versionEl.textContent = APP_VERSION;
+            if (updatedEl) updatedEl.textContent = `Last updated: ${LAST_UPDATED}`;
+
+            // Update admin panel visibility based on unlock state
+            updateAdminPanelVisibility();
 
             setTimeout(hideLoading, 500);
         }
@@ -603,14 +891,14 @@ ${data.reason}
             console.log('📋 Populating fine reasons dropdown...');
             const select = document.getElementById('fineReason');
             const filterSelect = document.getElementById('filterFine');
-            
+
             if (!select) {
                 console.error('❌ Fine reason select element not found!');
                 return;
             }
-            
+
             select.innerHTML = '<option value="">Select fine...</option>';
-            filterSelect.innerHTML = '<option value="">All Fines</option>';
+            if (filterSelect) filterSelect.innerHTML = '<option value="">All Fines</option>';
             
             console.log('📋 Adding', fineReasons.length, 'fine reasons');
             fineReasons.forEach((fine, index) => {
@@ -620,10 +908,12 @@ ${data.reason}
                 option.dataset.amount = fine.amount;
                 select.appendChild(option);
                 
-                const filterOption = document.createElement('option');
-                filterOption.value = fine.reason;
-                filterOption.textContent = fine.reason;
-                filterSelect.appendChild(filterOption);
+                if (filterSelect) {
+                    const filterOption = document.createElement('option');
+                    filterOption.value = fine.reason;
+                    filterOption.textContent = fine.reason;
+                    filterSelect.appendChild(filterOption);
+                }
                 
                 if (index < 3) {
                     console.log(`  ${index + 1}. ${fine.reason} - £${fine.amount}`);
@@ -634,10 +924,14 @@ ${data.reason}
 
         function setDefaultDate() {
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('fineDate').value = today;
-            document.getElementById('batonDate').value = today;
-            document.getElementById('paidDateInput').value = today;
-            document.getElementById('markAllDateInput').value = today;
+            const setIfExists = (id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = today;
+            };
+            setIfExists('fineDate');
+            setIfExists('batonDate');
+            setIfExists('paidDateInput');
+            setIfExists('markAllDateInput');
         }
 
         function updateAmount() {
@@ -650,7 +944,12 @@ ${data.reason}
         }
 
         function setupFormHandlers() {
-            document.getElementById('fineForm').addEventListener('submit', async (e) => {
+            const fineForm = document.getElementById('fineForm');
+            if (!fineForm) {
+                console.warn('⚠️ fineForm not found, skipping form handler setup');
+                return;
+            }
+            fineForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 console.log('📝 Form submitted');
 
@@ -680,7 +979,6 @@ ${data.reason}
                     const password = await getAdminPassword('adding fines');
 
                     // Add a fine for each selected player
-                    const addFineFunc = httpsCallable(functions, 'addFine');
                     for (const playerName of selectedPlayers) {
                         const fine = {
                             playerName: playerName,
@@ -692,7 +990,7 @@ ${data.reason}
                             timestamp: new Date().toISOString()
                         };
                         try {
-                            await addFineFunc({ fine, adminPassword: password });
+                            await callFunction('addFine', { fine, adminPassword: password });
                             console.log('✅ Saved fine for', playerName);
                         } catch (error) {
                             handlePermissionError(error, 'adding fines');
@@ -715,22 +1013,39 @@ ${data.reason}
                 }
             });
 
-            document.getElementById('batonForm').addEventListener('submit', async (e) => {
+            const batonForm = document.getElementById('batonForm');
+            if (!batonForm) {
+                console.warn('⚠️ batonForm not found, skipping baton form handler');
+                return;
+            }
+            batonForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
+                const fromTeam = document.getElementById('batonCurrentTeam').textContent;
+                const toTeam = document.getElementById('batonLostTo').value;
+                const score = document.getElementById('batonScore').value;
+                const dateVal = document.getElementById('batonDate').value;
+                const scoreParts = score.split('-');
                 const entry = {
-                    from: document.getElementById('batonCurrentTeam').textContent,
-                    to: document.getElementById('batonLostTo').value,
-                    score: document.getElementById('batonScore').value,
-                    date: document.getElementById('batonDate').value,
+                    // New format fields
+                    previousHolderTeamName: fromTeam,
+                    newHolderTeamName: toTeam,
+                    homeScore: scoreParts[0] ? parseInt(scoreParts[0]) : 0,
+                    awayScore: scoreParts[1] ? parseInt(scoreParts[1]) : 0,
+                    matchDate: dateVal,
+                    // Keep old format for backward compatibility
+                    from: fromTeam,
+                    to: toTeam,
+                    score: score,
+                    date: dateVal,
                     timestamp: new Date().toISOString()
                 };
 
                 try {
                     showLoading('Updating baton...');
                     const password = await getAdminPassword('updating baton');
-                    const addBatonEntryFunc = httpsCallable(functions, 'addBatonEntry');
-                    await addBatonEntryFunc({ entry, adminPassword: password });
+                    
+                    await callFunction('addBatonEntry', { entry, adminPassword: password });
                     hideLoading();
                     e.target.reset();
                     setDefaultDate();
@@ -741,6 +1056,68 @@ ${data.reason}
                     showToast('Failed to update baton', 'error');
                 }
             });
+
+            // Enter key support for various inputs
+            setupEnterKeyHandlers();
+        }
+
+        function setupEnterKeyHandlers() {
+            // Unlock password - press Enter to unlock
+            const unlockInput = document.getElementById('unlockPassword');
+            if (unlockInput) {
+                unlockInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        unlockAdminPanel();
+                    }
+                });
+            }
+
+            // Team search - press Enter to search
+            const teamSearchInput = document.getElementById('teamSearchInput');
+            if (teamSearchInput) {
+                teamSearchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        searchTeamsAdmin();
+                    }
+                });
+            }
+
+            // Opponent search - press Enter to search
+            const opponentSearchInput = document.getElementById('opponentSearchInput');
+            if (opponentSearchInput) {
+                opponentSearchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        searchOpponentTeam();
+                    }
+                });
+            }
+
+            // New player input - press Enter to add
+            const newPlayerInput = document.getElementById('newPlayerName');
+            if (newPlayerInput) {
+                newPlayerInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addNewPlayer();
+                    }
+                });
+            }
+
+            // Competition name - press Enter to submit match
+            const competitionInput = document.getElementById('competitionName');
+            if (competitionInput) {
+                competitionInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitMatchResult();
+                    }
+                });
+            }
+
+            console.log('✅ Enter key handlers setup');
         }
 
         function setupRealtimeListeners() {
@@ -882,6 +1259,7 @@ ${data.reason}
                 updateBatonTracker();
                 updatePlayers();
                 updateCharts();
+                updateVotingDropdowns();
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -931,14 +1309,18 @@ ${data.reason}
             const statsSelect = document.getElementById('playerSelector');
             const filterSelect = document.getElementById('filterPlayer');
             const deleteSelect = document.getElementById('deletePlayerSelect');
+            const comparePlayerA = document.getElementById('comparePlayerA');
+            const comparePlayerB = document.getElementById('comparePlayerB');
 
             if (addFineSelect) addFineSelect.innerHTML = '<option value="">Select player...</option>';
             if (statsSelect) statsSelect.innerHTML = '<option value="all">All Players</option>';
             if (filterSelect) filterSelect.innerHTML = '<option value="">All Players</option>';
             if (deleteSelect) deleteSelect.innerHTML = '<option value="">Select player to delete...</option>';
+            if (comparePlayerA) comparePlayerA.innerHTML = '<option value="">Select player...</option>';
+            if (comparePlayerB) comparePlayerB.innerHTML = '<option value="">Select player...</option>';
 
             allPlayers.forEach(player => {
-                [addFineSelect, statsSelect, filterSelect, deleteSelect].forEach(select => {
+                [addFineSelect, statsSelect, filterSelect, deleteSelect, comparePlayerA, comparePlayerB].forEach(select => {
                     if (select) {
                         const option = document.createElement('option');
                         option.value = player.name;
@@ -1078,10 +1460,10 @@ ${data.reason}
             await savePlayers();
 
             const playerFines = allFines.filter(f => f.playerName === name);
-            const deleteFineFunc = httpsCallable(functions, 'deleteFine');
+            
             for (const fine of playerFines) {
                 try {
-                    await deleteFineFunc({ fineId: fine.id, adminPassword: password });
+                    await callFunction('deleteFine', { fineId: fine.id, adminPassword: password });
                 } catch (error) {
                     handlePermissionError(error, 'deleting fines');
                 }
@@ -1109,10 +1491,10 @@ ${data.reason}
             await savePlayers();
 
             const playerFines = allFines.filter(f => f.playerName === name);
-            const deleteFineFunc = httpsCallable(functions, 'deleteFine');
+            
             for (const fine of playerFines) {
                 try {
-                    await deleteFineFunc({ fineId: fine.id, adminPassword: password });
+                    await callFunction('deleteFine', { fineId: fine.id, adminPassword: password });
                 } catch (error) {
                     handlePermissionError(error, 'deleting fines');
                 }
@@ -1126,8 +1508,8 @@ ${data.reason}
         async function savePlayers() {
             try {
                 const password = await getAdminPassword('saving players');
-                const updatePlayersFunc = httpsCallable(functions, 'updatePlayers');
-                await updatePlayersFunc({ players: allPlayers, adminPassword: password });
+                
+                await callFunction('updatePlayers', { players: allPlayers, adminPassword: password });
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
                 updateSettingsPlayersTable();
@@ -1139,14 +1521,22 @@ ${data.reason}
 
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
+            document.querySelector(`.tab[onclick*="${tabName}"]`)?.classList.add('active');
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             window.scrollTo(0, 0);
 
+            // Remember last tab
+            localStorage.setItem('lastTab', tabName);
+
             // Update lock status when switching to settings
             if (tabName === 'settings') {
                 updateLockStatus();
+            }
+
+            // Update baton form holder name when switching to baton tab
+            if (tabName === 'baton') {
+                updateMatchFormHolder();
             }
         }
 
@@ -1163,6 +1553,7 @@ ${data.reason}
             updateFineReasonsTable();
             updateCharts();
             updateSpakkaTab();
+            updateVotingUI();
             const fines = getFinesForAnalytics();
             document.getElementById('totalRecords').textContent = fines.length;
         }
@@ -1290,8 +1681,114 @@ ${data.reason}
             `;
         }
 
+        // Player vs Player comparison
+        function updatePlayerComparison() {
+            const playerA = document.getElementById('comparePlayerA').value;
+            const playerB = document.getElementById('comparePlayerB').value;
+            const resultDiv = document.getElementById('comparisonResult');
+
+            if (!playerA || !playerB || playerA === playerB) {
+                resultDiv.style.display = 'none';
+                return;
+            }
+
+            resultDiv.style.display = 'block';
+            const fines = getFinesForAnalytics();
+
+            // Get stats for each player
+            const statsA = getPlayerComparisonStats(playerA, fines);
+            const statsB = getPlayerComparisonStats(playerB, fines);
+
+            // Comparison bar
+            const total = statsA.total + statsB.total;
+            const percentA = total > 0 ? (statsA.total / total * 100).toFixed(0) : 50;
+            const percentB = total > 0 ? (statsB.total / total * 100).toFixed(0) : 50;
+
+            document.getElementById('comparisonBar').innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-weight: 600; color: #C8102E; min-width: 60px; text-align: right;">${playerA}</span>
+                    <div style="flex: 1; display: flex; height: 30px; border-radius: 15px; overflow: hidden; background: #eee;">
+                        <div style="width: ${percentA}%; background: linear-gradient(90deg, #C8102E, #ff6b6b); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85em;">
+                            ${percentA}%
+                        </div>
+                        <div style="width: ${percentB}%; background: linear-gradient(90deg, #4a90d9, #1D428A); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85em;">
+                            ${percentB}%
+                        </div>
+                    </div>
+                    <span style="font-weight: 600; color: #1D428A; min-width: 60px;">${playerB}</span>
+                </div>
+            `;
+
+            // Player A stats
+            document.getElementById('playerAStats').innerHTML = `
+                <div style="font-weight: bold; color: #C8102E; margin-bottom: 10px; font-size: 1.1em;">${playerA}</div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #333;">£${statsA.total}</div>
+                <div style="color: #666; font-size: 0.85em; margin-top: 5px;">${statsA.count} fines</div>
+                <div style="color: #999; font-size: 0.8em; margin-top: 3px;">Avg: £${statsA.avg}</div>
+            `;
+
+            // Player B stats
+            document.getElementById('playerBStats').innerHTML = `
+                <div style="font-weight: bold; color: #1D428A; margin-bottom: 10px; font-size: 1.1em;">${playerB}</div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #333;">£${statsB.total}</div>
+                <div style="color: #666; font-size: 0.85em; margin-top: 5px;">${statsB.count} fines</div>
+                <div style="color: #999; font-size: 0.8em; margin-top: 3px;">Avg: £${statsB.avg}</div>
+            `;
+
+            // Fine types breakdown for Player A
+            document.getElementById('playerAFineTypes').innerHTML = `
+                <div style="font-weight: 600; color: #C8102E; margin-bottom: 8px; font-size: 0.9em;">${playerA}</div>
+                ${statsA.topFineTypes.map((ft, i) => `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #eee;">
+                        <span style="color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
+                        <span style="font-weight: 600; color: #333;">${ft.count}x</span>
+                    </div>
+                `).join('') || '<div style="color: #999; font-size: 0.8em;">No fines</div>'}
+            `;
+
+            // Fine types breakdown for Player B
+            document.getElementById('playerBFineTypes').innerHTML = `
+                <div style="font-weight: 600; color: #1D428A; margin-bottom: 8px; font-size: 0.9em;">${playerB}</div>
+                ${statsB.topFineTypes.map((ft, i) => `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #eee;">
+                        <span style="color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
+                        <span style="font-weight: 600; color: #333;">${ft.count}x</span>
+                    </div>
+                `).join('') || '<div style="color: #999; font-size: 0.8em;">No fines</div>'}
+            `;
+        }
+
+        function getPlayerComparisonStats(playerName, fines) {
+            const playerFines = fines ? fines.filter(f => f.playerName === playerName) : [];
+            const total = playerFines.reduce((sum, f) => sum + (f.amount || 0), 0);
+            const count = playerFines.length;
+            const avg = count > 0 ? (total / count).toFixed(2) : '0.00';
+
+            // Get fine type counts
+            const fineTypeCounts = {};
+            playerFines.forEach(f => {
+                if (f.reason) {
+                    fineTypeCounts[f.reason] = (fineTypeCounts[f.reason] || 0) + 1;
+                }
+            });
+
+            // Sort and get top 5
+            const topFineTypes = Object.entries(fineTypeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([reason, count]) => ({ reason, count }));
+
+            return { total, count, avg, topFineTypes };
+        }
+
         function setDateFilter(range) {
             currentDateRangeFilter = range;
+
+            // Clear specific date input to avoid conflicts
+            const dateInput = document.getElementById('filterDate');
+            if (dateInput) {
+                dateInput.value = '';
+            }
 
             // Calculate date range
             const now = new Date();
@@ -1345,14 +1842,35 @@ ${data.reason}
             const paidFilter = document.getElementById('filterPaid').value;
             const dateFilter = document.getElementById('filterDate').value;
 
+            // If specific date is selected, clear the date range filter to avoid conflicts
+            if (dateFilter) {
+                window.dateRangeStart = null;
+                window.dateRangeEnd = null;
+                const indicator = document.getElementById('dateRangeIndicator');
+                if (indicator) {
+                    indicator.textContent = 'Showing: Specific date (' + formatDateDDMMYYYY(dateFilter) + ')';
+                }
+            }
+
             const rows = document.querySelectorAll('#historyContent table tbody tr');
+
+            // Stats tracking for summary
+            let totalCount = 0;
+            let totalCost = 0;
+            let totalPaid = 0;
+            let totalUnpaid = 0;
+            const playerStats = {};
+            const dailyStats = {};
 
             rows.forEach(row => {
                 const cells = row.cells;
-                const dateDDMMYYYY = cells[0].textContent;
-                const player = cells[1].textContent;
+                const dateDDMMYYYY = cells[0].textContent.trim();
+                const player = cells[1].textContent.trim();
                 const fullReason = row.getAttribute('data-full-reason') || cells[2].textContent;
-                const status = cells[4].textContent.includes('✓') ? 'paid' : 'unpaid';
+                const amountText = cells[3].textContent.replace('£', '');
+                const amount = parseFloat(amountText) || 0;
+                const isPaid = cells[4].textContent.includes('✓');
+                const status = isPaid ? 'paid' : 'unpaid';
 
                 let show = true;
 
@@ -1377,8 +1895,11 @@ ${data.reason}
                 }
 
                 // Date filter (specific date)
-                if (dateFilter && !dateDDMMYYYY.includes(formatDateDDMMYYYY(dateFilter))) {
-                    show = false;
+                if (dateFilter) {
+                    const formattedFilter = formatDateDDMMYYYY(dateFilter);
+                    if (dateDDMMYYYY !== formattedFilter) {
+                        show = false;
+                    }
                 }
 
                 // Date range filter
@@ -1386,18 +1907,124 @@ ${data.reason}
                     // Parse DD/MM/YYYY to Date object
                     const parts = dateDDMMYYYY.split('/');
                     if (parts.length === 3) {
-                        const fineDate = new Date(parts[2], parts[1] - 1, parts[0]);
-                        if (window.dateRangeStart && fineDate < window.dateRangeStart) {
-                            show = false;
+                        const day = parseInt(parts[0], 10);
+                        const month = parseInt(parts[1], 10) - 1;
+                        const year = parseInt(parts[2], 10);
+                        const fineDate = new Date(year, month, day);
+                        fineDate.setHours(0, 0, 0, 0); // Normalize to midnight
+
+                        if (window.dateRangeStart) {
+                            const start = new Date(window.dateRangeStart);
+                            start.setHours(0, 0, 0, 0);
+                            if (fineDate < start) {
+                                show = false;
+                            }
                         }
-                        if (window.dateRangeEnd && fineDate > window.dateRangeEnd) {
-                            show = false;
+                        if (window.dateRangeEnd) {
+                            const end = new Date(window.dateRangeEnd);
+                            end.setHours(23, 59, 59, 999); // End of day
+                            if (fineDate > end) {
+                                show = false;
+                            }
                         }
                     }
                 }
 
                 row.style.display = show ? '' : 'none';
+
+                // Collect stats for visible rows
+                if (show) {
+                    totalCount++;
+                    totalCost += amount;
+                    if (isPaid) {
+                        totalPaid += amount;
+                    } else {
+                        totalUnpaid += amount;
+                    }
+
+                    // Player breakdown
+                    if (!playerStats[player]) {
+                        playerStats[player] = { count: 0, total: 0 };
+                    }
+                    playerStats[player].count++;
+                    playerStats[player].total += amount;
+
+                    // Daily breakdown
+                    if (!dailyStats[dateDDMMYYYY]) {
+                        dailyStats[dateDDMMYYYY] = { count: 0, total: 0 };
+                    }
+                    dailyStats[dateDDMMYYYY].count++;
+                    dailyStats[dateDDMMYYYY].total += amount;
+                }
             });
+
+            // Update summary UI
+            updateFilterSummary(totalCount, totalCost, totalPaid, totalUnpaid, playerStats, dailyStats);
+        }
+
+        function updateFilterSummary(totalCount, totalCost, totalPaid, totalUnpaid, playerStats, dailyStats) {
+            const summaryDiv = document.getElementById('filterSummary');
+            if (!summaryDiv) return;
+
+            // Show/hide summary based on whether there's data
+            if (totalCount === 0) {
+                summaryDiv.style.display = 'none';
+                return;
+            }
+            summaryDiv.style.display = 'block';
+
+            // Update main stats
+            document.getElementById('summaryTotalCount').textContent = totalCount;
+            document.getElementById('summaryTotalCost').textContent = '£' + totalCost.toFixed(2);
+            document.getElementById('summaryPaid').textContent = '£' + totalPaid.toFixed(2);
+            document.getElementById('summaryUnpaid').textContent = '£' + totalUnpaid.toFixed(2);
+
+            // Top players (sorted by total)
+            const topPlayers = Object.entries(playerStats)
+                .sort((a, b) => b[1].total - a[1].total)
+                .slice(0, 5);
+
+            const topPlayersDiv = document.getElementById('summaryTopPlayers');
+            topPlayersDiv.innerHTML = topPlayers.map(([name, stats], index) => {
+                const colors = ['#C8102E', '#1D428A', '#00843D', '#FFCD00', '#666'];
+                return `<span style="background: ${colors[index]}; color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.85em;">
+                    ${name}: £${stats.total.toFixed(2)} (${stats.count})
+                </span>`;
+            }).join('');
+
+            // Daily breakdown
+            const dailyEntries = Object.entries(dailyStats).sort((a, b) => {
+                // Sort by date descending
+                const partsA = a[0].split('/');
+                const partsB = b[0].split('/');
+                const dateA = new Date(parseInt(partsA[2], 10), parseInt(partsA[1], 10) - 1, parseInt(partsA[0], 10));
+                const dateB = new Date(parseInt(partsB[2], 10), parseInt(partsB[1], 10) - 1, parseInt(partsB[0], 10));
+                return dateB - dateA;
+            });
+
+            const uniqueDays = dailyEntries.length;
+            const avgPerDay = uniqueDays > 0 ? (totalCost / uniqueDays).toFixed(2) : '0.00';
+            const avgFinesPerDay = uniqueDays > 0 ? (totalCount / uniqueDays).toFixed(1) : '0';
+
+            const dailyStatsDiv = document.getElementById('summaryDailyStats');
+            dailyStatsDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;">
+                    <div><strong>Days with fines:</strong> ${uniqueDays}</div>
+                    <div><strong>Avg cost/day:</strong> £${avgPerDay}</div>
+                    <div><strong>Avg fines/day:</strong> ${avgFinesPerDay}</div>
+                    <div><strong>Total:</strong> £${totalCost.toFixed(2)}</div>
+                </div>
+                ${dailyEntries.length <= 10 ? `
+                    <div style="margin-top: 10px; font-size: 0.85em;">
+                        ${dailyEntries.map(([date, stats]) =>
+                            `<div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee;">
+                                <span>${date}</span>
+                                <span>${stats.count} fines = <strong>£${stats.total.toFixed(2)}</strong></span>
+                            </div>`
+                        ).join('')}
+                    </div>
+                ` : ''}
+            `;
         }
 
         // FULL HISTORY LOADER - Manual refresh only
@@ -1588,8 +2215,11 @@ ${data.reason}
 
             if (batonHistory && batonHistory.length > 0) {
                 const latest = batonHistory[0];
-                if (batonCurrentTeam) batonCurrentTeam.textContent = latest.to || '-';
-                if (batonCurrentDate) batonCurrentDate.textContent = `Updated: ${formatDateDDMMYYYY(latest.date)}`;
+                // Handle both old format (to/date) and new format (newHolderTeamName/matchDate)
+                const holderName = latest.newHolderTeamName || latest.to || '-';
+                const dateVal = latest.matchDate || latest.date || null;
+                if (batonCurrentTeam) batonCurrentTeam.textContent = holderName;
+                if (batonCurrentDate) batonCurrentDate.textContent = dateVal ? `Updated: ${formatDateDDMMYYYY(dateVal)}` : 'No date';
             } else {
                 if (batonCurrentTeam) batonCurrentTeam.textContent = '-';
                 if (batonCurrentDate) batonCurrentDate.textContent = 'No baton history';
@@ -1662,17 +2292,23 @@ ${data.reason}
             const historyTable = document.getElementById('batonHistoryTable');
             if (historyTable) {
                 historyTable.innerHTML = (batonHistory && batonHistory.length > 0)
-                    ? batonHistory.map(entry => `
+                    ? batonHistory.map(entry => {
+                        // Handle both old format (from/to/score/date) and new format (previousHolderTeamName/newHolderTeamName/homeScore/awayScore/matchDate)
+                        const dateVal = entry.matchDate || entry.date || '-';
+                        const fromVal = entry.previousHolderTeamName || entry.from || '-';
+                        const toVal = entry.newHolderTeamName || entry.to || '-';
+                        const scoreVal = entry.score || ((entry.homeScore !== undefined && entry.awayScore !== undefined) ? `${entry.homeScore}-${entry.awayScore}` : '-');
+                        return `
                         <tr>
-                            <td>${formatDateDDMMYYYY(entry.date)}</td>
-                            <td>${entry.from}</td>
-                            <td>${entry.score}</td>
-                            <td>${entry.to}</td>
+                            <td>${formatDateDDMMYYYY(dateVal)}</td>
+                            <td>${fromVal}</td>
+                            <td>${scoreVal}</td>
+                            <td>${toVal}</td>
                             <td>
                                 <button class="btn-small btn-danger" onclick="deleteBatonEntry('${entry.id}')">Del</button>
                             </td>
                         </tr>
-                    `).join('')
+                    `}).join('')
                     : '<tr><td colspan="5" style="text-align: center;">No history</td></tr>';
             }
 
@@ -1684,8 +2320,8 @@ ${data.reason}
                 try {
                     showLoading('Deleting...');
                     const password = await getAdminPassword('deleting baton entry');
-                    const deleteBatonEntryFunc = httpsCallable(functions, 'deleteBatonEntry');
-                    await deleteBatonEntryFunc({ entryId: id, adminPassword: password });
+                    
+                    await callFunction('deleteBatonEntry', { entryId: id, adminPassword: password });
                     hideLoading();
                     showToast('Entry deleted', 'success');
                 } catch (error) {
@@ -1762,9 +2398,12 @@ ${data.reason}
             // Update baton holder
             const batonHolderElement = document.getElementById('spakkaBatonHolder');
             if (batonHolderElement) {
-                if (batonHistory && batonHistory.length > 0) {
+                if (currentBatonHolder && currentBatonHolder.holderTeamName) {
+                    batonHolderElement.textContent = currentBatonHolder.holderTeamName;
+                } else if (batonHistory && batonHistory.length > 0) {
+                    // Fallback to history if currentBatonHolder not set
                     const latest = batonHistory[0];
-                    batonHolderElement.textContent = latest.to || '-';
+                    batonHolderElement.textContent = latest.newHolderTeamName || latest.to || '-';
                 } else {
                     batonHolderElement.textContent = '-';
                 }
@@ -1853,8 +2492,8 @@ ${data.reason}
 
             try {
                 const password = await getAdminPassword('marking fine as paid');
-                const updateFineFunc = httpsCallable(functions, 'updateFine');
-                await updateFineFunc({
+                
+                await callFunction('updateFine', {
                     fineId: currentPaidFineId,
                     updates: { paid: true, paidDate: paidDate },
                     adminPassword: password
@@ -1869,8 +2508,8 @@ ${data.reason}
         async function confirmUnpaid(id) {
             try {
                 const password = await getAdminPassword('marking fine as unpaid');
-                const updateFineFunc = httpsCallable(functions, 'updateFine');
-                await updateFineFunc({
+                
+                await callFunction('updateFine', {
                     fineId: id,
                     updates: { paid: false, paidDate: null },
                     adminPassword: password
@@ -1915,9 +2554,9 @@ ${data.reason}
             try {
                 showLoading(`Marking ${unpaidFines.length} fines as paid...`);
                 const password = await getAdminPassword('marking all fines as paid');
-                const updateFineFunc = httpsCallable(functions, 'updateFine');
+                
                 for (const fine of unpaidFines) {
-                    await updateFineFunc({
+                    await callFunction('updateFine', {
                         fineId: fine.id,
                         updates: { paid: true, paidDate: paidDate },
                         adminPassword: password
@@ -1938,8 +2577,8 @@ ${data.reason}
                 try {
                     showLoading('Deleting...');
                     const password = await getAdminPassword('deleting fine');
-                    const deleteFineFunc = httpsCallable(functions, 'deleteFine');
-                    await deleteFineFunc({ fineId: id, adminPassword: password });
+                    
+                    await callFunction('deleteFine', { fineId: id, adminPassword: password });
                     hideLoading();
                     showToast('Fine deleted', 'success');
                 } catch (error) {
@@ -1957,8 +2596,8 @@ ${data.reason}
             try {
                 showLoading('Clearing all fines...');
                 const password = await getAdminPassword('clearing all fines');
-                const deleteAllFinesFunc = httpsCallable(functions, 'deleteAllFines');
-                const result = await deleteAllFinesFunc({ adminPassword: password });
+                
+                const result = await callFunction('deleteAllFines', { adminPassword: password });
                 hideLoading();
                 showToast(`Cleared ${result.data.count} fines successfully`, 'success');
             } catch (error) {
@@ -2483,8 +3122,8 @@ ${data.reason}
                 if (replaceAll) {
                     showLoading('Deleting all existing fines...');
                     showImportAlert('Deleting all existing fines...', 'info');
-                    const deleteAllFinesFunc = httpsCallable(functions, 'deleteAllFines');
-                    const result = await deleteAllFinesFunc({ adminPassword: password });
+                    
+                    const result = await callFunction('deleteAllFines', { adminPassword: password });
                     showImportAlert(`Deleted ${result.data.count} existing fines`, 'success');
                 }
 
@@ -2494,9 +3133,9 @@ ${data.reason}
                 showLoading(`${action} ${fines.length} fines...`);
 
                 let imported = 0;
-                const addFineFunc = httpsCallable(functions, 'addFine');
+                
                 for (const fine of fines) {
-                    await addFineFunc({ fine, adminPassword: password });
+                    await callFunction('addFine', { fine, adminPassword: password });
                     imported++;
 
                     // Update progress every 50 fines
@@ -2601,8 +3240,8 @@ ${data.reason}
         async function saveFineReasons() {
             try {
                 const password = await getAdminPassword('saving fine reasons');
-                const updateFineReasonsFunc = httpsCallable(functions, 'updateFineReasons');
-                await updateFineReasonsFunc({ fineReasons, adminPassword: password });
+                
+                await callFunction('updateFineReasons', { fineReasons, adminPassword: password });
                 populateFineReasons();
                 updateFineReasonsTable();
             } catch (error) {
@@ -2787,9 +3426,10 @@ ${data.reason}
                     .filter(([, stats]) => stats && stats.games > 0)
                     .map(([name, stats]) => ({
                         name,
+                        games: stats.games,
                         perGame: stats.total / stats.games
                     }))
-                    .sort((a, b) => b.perGame - a.perGame)
+                    .sort((a, b) => b.games - a.games)
                     .slice(0, 10);
 
                 if (perGameData.length === 0) {
@@ -2802,34 +3442,91 @@ ${data.reason}
                     type: 'bar',
                     data: {
                         labels: perGameData.map(p => p.name || ''),
-                        datasets: [{
-                            label: 'Fines Per Game (£)',
-                            data: perGameData.map(p => p.perGame || 0),
-                            backgroundColor: '#FFCD00',
-                            borderColor: '#1D428A',
-                            borderWidth: 2
-                        }]
+                        datasets: [
+                            {
+                                label: 'Games Played',
+                                data: perGameData.map(p => p.games || 0),
+                                backgroundColor: '#1D428A',
+                                borderColor: '#1D428A',
+                                borderWidth: 1,
+                                yAxisID: 'y',
+                                order: 2
+                            },
+                            {
+                                label: 'Cost Per Game (£)',
+                                data: perGameData.map(p => p.perGame || 0),
+                                type: 'line',
+                                borderColor: '#C8102E',
+                                backgroundColor: '#C8102E',
+                                borderWidth: 3,
+                                pointBackgroundColor: '#C8102E',
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 2,
+                                pointRadius: 5,
+                                tension: 0.3,
+                                yAxisID: 'y1',
+                                order: 1
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: false },
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    font: { size: 11 }
+                                }
+                            },
                             title: {
                                 display: true,
-                                text: 'Top 10 Players by Fines Per Game',
+                                text: 'Games Played vs Cost Per Game',
                                 color: '#1D428A',
                                 font: { size: 14, weight: 'bold' }
                             }
                         },
                         scales: {
                             y: {
+                                type: 'linear',
+                                position: 'left',
                                 beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Games Played',
+                                    color: '#1D428A',
+                                    font: { size: 11, weight: 'bold' }
+                                },
+                                ticks: {
+                                    stepSize: 1,
+                                    font: { size: 11 },
+                                    color: '#1D428A'
+                                },
+                                grid: {
+                                    drawOnChartArea: true
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                position: 'right',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Cost Per Game (£)',
+                                    color: '#C8102E',
+                                    font: { size: 11, weight: 'bold' }
+                                },
                                 ticks: {
                                     callback: function(value) {
                                         return '£' + (value || 0).toFixed(2);
                                     },
-                                    font: { size: 11 }
+                                    font: { size: 11 },
+                                    color: '#C8102E'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
                                 }
                             },
                             x: {
@@ -2846,54 +3543,67 @@ ${data.reason}
         }
 
         function updateFineTypesChart() {
-            const ctx = document.getElementById('fineTypesChart');
-            if (!ctx) return;
+            const container = document.getElementById('busiestByCount');
+            if (!container) return;
 
-            const fines = getFinesForAnalytics(); // Use canonical dataset
-            const fineTypeCounts = {};
+            const fines = getFinesForAnalytics();
+
+            // Group fines by date with player breakdown
+            const dailyStats = {};
             fines.forEach(fine => {
-                fineTypeCounts[fine.reason] = (fineTypeCounts[fine.reason] || 0) + 1;
+                const dateKey = formatDateDDMMYYYY(fine.date);
+                if (!dailyStats[dateKey]) {
+                    dailyStats[dateKey] = { count: 0, total: 0, players: {} };
+                }
+                dailyStats[dateKey].count++;
+                dailyStats[dateKey].total += fine.amount || 0;
+
+                const playerName = fine.playerName || 'Unknown';
+                if (!dailyStats[dateKey].players[playerName]) {
+                    dailyStats[dateKey].players[playerName] = 0;
+                }
+                dailyStats[dateKey].players[playerName]++;
             });
 
-            const topFines = Object.entries(fineTypeCounts)
-                .sort((a, b) => b[1] - a[1])
+            // Find top offender for each day
+            Object.values(dailyStats).forEach(day => {
+                const topPlayer = Object.entries(day.players)
+                    .sort((a, b) => b[1] - a[1])[0];
+                day.topOffender = topPlayer ? topPlayer[0] : '-';
+                day.topOffenderCount = topPlayer ? topPlayer[1] : 0;
+            });
+
+            // Top 10 by fine count
+            const topDays = Object.entries(dailyStats)
+                .sort((a, b) => b[1].count - a[1].count)
                 .slice(0, 10);
 
-            if (charts.fineTypes) charts.fineTypes.destroy();
-            charts.fineTypes = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: topFines.map(([reason]) => reason.substring(0, 30)),
-                    datasets: [{
-                        data: topFines.map(([, count]) => count),
-                        backgroundColor: [
-                            '#1D428A', '#FFCD00', '#C8102E', '#00A3E0', '#6ECEB2',
-                            '#FF6B6B', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3'
-                        ],
-                        borderWidth: 2,
-                        borderColor: '#ffffff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                boxWidth: 15,
-                                font: { size: 11 }
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Most Common Fine Types',
-                            color: '#1D428A',
-                            font: { size: 14, weight: 'bold' }
-                        }
-                    }
-                }
-            });
+            if (topDays.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No data</p>';
+                return;
+            }
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Date</th>
+                            <th style="text-align: center;">Fines</th>
+                            <th style="text-align: right;">Cost</th>
+                            <th style="text-align: left;">Top Offender</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${topDays.map(([date, stats], i) => `
+                            <tr${i === 0 ? ' style="background: linear-gradient(90deg, #fff3cd, #fff8e6);"' : ''}>
+                                <td>${i === 0 ? '🏆 ' : ''}${date}</td>
+                                <td style="text-align: center; font-weight: 600; color: #1D428A;">${stats.count}</td>
+                                <td style="text-align: right; color: #C8102E;">£${stats.total.toFixed(2)}</td>
+                                <td>${stats.topOffender} <span style="color: #666;">(${stats.topOffenderCount})</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
         }
 
         function updatePaymentChart() {
@@ -3172,5 +3882,1126 @@ ${data.reason}
                 </div>
             `;
         }
+
+        // =====================================================
+        // VOTING SYSTEM FUNCTIONS
+        // =====================================================
+
+        // Get today's date as YYYY-MM-DD string
+        function getTodayDateString() {
+            const now = new Date();
+            return now.toISOString().split('T')[0];
+        }
+
+        // Get yesterday's date as YYYY-MM-DD string
+        function getYesterdayDateString() {
+            const now = new Date();
+            now.setDate(now.getDate() - 1);
+            return now.toISOString().split('T')[0];
+        }
+
+        // Check if voting is currently open (6am - 11:59pm)
+        function isVotingOpen() {
+            const now = new Date();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+
+            if (hour < VOTING_OPEN_HOUR) return false;
+            if (hour > VOTING_CLOSE_HOUR) return false;
+            if (hour === VOTING_CLOSE_HOUR && minute > VOTING_CLOSE_MINUTE) return false;
+            return true;
+        }
+
+        // Get time remaining until voting closes
+        function getVotingTimeRemaining() {
+            const now = new Date();
+            const closeTime = new Date();
+            closeTime.setHours(VOTING_CLOSE_HOUR, VOTING_CLOSE_MINUTE, 59, 999);
+
+            if (now >= closeTime) return null;
+
+            const diff = closeTime - now;
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+            if (hours > 0) {
+                return `${hours}h ${minutes}m remaining`;
+            }
+            return `${minutes}m remaining`;
+        }
+
+        // Initialize voting system
+        async function initializeVoting() {
+            updateVotingDropdowns();
+            updateVotingStatus();
+            await loadLastNightResults();
+            await loadAllTimeVoteTotals();
+            setupTodayVotesListener();
+
+            // Update voting status every minute
+            setInterval(updateVotingStatus, 60000);
+        }
+
+        // Update voting player dropdowns
+        function updateVotingDropdowns() {
+            const voterSelect = document.getElementById('votingVoterName');
+            const bestSelect = document.getElementById('votingBestPlayer');
+            const worstSelect = document.getElementById('votingWorstPlayer');
+
+            if (!voterSelect || !bestSelect || !worstSelect) return;
+
+            const playerOptions = allPlayers.map(p =>
+                `<option value="${p.name}">${p.name}</option>`
+            ).join('');
+
+            voterSelect.innerHTML = '<option value="">Select your name...</option>' + playerOptions;
+            bestSelect.innerHTML = '<option value="">Select best player...</option>' + playerOptions;
+            worstSelect.innerHTML = '<option value="">Select worst player...</option>' + playerOptions;
+        }
+
+        // Update voting status banner
+        function updateVotingStatus() {
+            const statusText = document.getElementById('votingStatusText');
+            const timeRemaining = document.getElementById('votingTimeRemaining');
+            const formContainer = document.getElementById('votingFormContainer');
+            const closedMessage = document.getElementById('votingClosedMessage');
+            const standingsContainer = document.getElementById('todayStandingsContainer');
+
+            if (!statusText) return;
+
+            const votingOpen = isVotingOpen();
+
+            if (votingOpen) {
+                statusText.innerHTML = '🟢 Voting is OPEN';
+                statusText.style.color = '#27ae60';
+                const remaining = getVotingTimeRemaining();
+                if (timeRemaining && remaining) {
+                    timeRemaining.textContent = remaining;
+                }
+                if (formContainer) formContainer.style.display = 'block';
+                if (closedMessage) closedMessage.style.display = 'none';
+                if (standingsContainer) standingsContainer.style.display = 'block';
+            } else {
+                statusText.innerHTML = '🔴 Voting is CLOSED';
+                statusText.style.color = '#e74c3c';
+                if (timeRemaining) {
+                    timeRemaining.textContent = 'Opens at 6:00 AM';
+                }
+                if (formContainer) formContainer.style.display = 'none';
+                if (closedMessage) closedMessage.style.display = 'block';
+                if (standingsContainer) standingsContainer.style.display = 'none';
+            }
+        }
+
+        // Load last night's results
+        async function loadLastNightResults() {
+            try {
+                const yesterday = getYesterdayDateString();
+                const votesDoc = await getDocs(collection(db, 'dailyVotes'));
+                const yesterdayData = votesDoc.docs.find(d => d.id === yesterday);
+
+                if (yesterdayData) {
+                    const votes = yesterdayData.data().votes || {};
+                    const bestCounts = {};
+                    const worstCounts = {};
+
+                    Object.values(votes).forEach(vote => {
+                        if (vote.best) {
+                            bestCounts[vote.best] = (bestCounts[vote.best] || 0) + 1;
+                        }
+                        if (vote.worst) {
+                            worstCounts[vote.worst] = (worstCounts[vote.worst] || 0) + 1;
+                        }
+                    });
+
+                    // Find winners
+                    const bestWinner = Object.entries(bestCounts).sort((a, b) => b[1] - a[1])[0];
+                    const worstWinner = Object.entries(worstCounts).sort((a, b) => b[1] - a[1])[0];
+
+                    if (bestWinner || worstWinner) {
+                        lastNightResults = {
+                            best: bestWinner ? { name: bestWinner[0], votes: bestWinner[1] } : null,
+                            worst: worstWinner ? { name: worstWinner[0], votes: worstWinner[1] } : null
+                        };
+                        updateLastNightResultsUI();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading last night results:', error);
+            }
+        }
+
+        // Update last night results UI
+        function updateLastNightResultsUI() {
+            const container = document.getElementById('lastNightResults');
+            const bestEl = document.getElementById('lastNightBest');
+            const bestVotesEl = document.getElementById('lastNightBestVotes');
+            const worstEl = document.getElementById('lastNightWorst');
+            const worstVotesEl = document.getElementById('lastNightWorstVotes');
+
+            if (!container || !lastNightResults) {
+                if (container) container.style.display = 'none';
+                return;
+            }
+
+            if (!lastNightResults.best && !lastNightResults.worst) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+
+            if (bestEl && lastNightResults.best) {
+                bestEl.textContent = lastNightResults.best.name;
+                if (bestVotesEl) bestVotesEl.textContent = `(${lastNightResults.best.votes} votes)`;
+            }
+
+            if (worstEl && lastNightResults.worst) {
+                worstEl.textContent = lastNightResults.worst.name;
+                if (worstVotesEl) worstVotesEl.textContent = `(${lastNightResults.worst.votes} votes)`;
+            }
+        }
+
+        // Load all-time vote totals
+        async function loadAllTimeVoteTotals() {
+            try {
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const totals = {};
+
+                // Initialize all players with zero votes
+                allPlayers.forEach(p => {
+                    totals[p.name] = { best: 0, worst: 0 };
+                });
+
+                votesSnapshot.docs.forEach(doc => {
+                    const votes = doc.data().votes || {};
+                    Object.values(votes).forEach(vote => {
+                        if (vote.best) {
+                            if (!totals[vote.best]) totals[vote.best] = { best: 0, worst: 0 };
+                            totals[vote.best].best++;
+                        }
+                        if (vote.worst) {
+                            if (!totals[vote.worst]) totals[vote.worst] = { best: 0, worst: 0 };
+                            totals[vote.worst].worst++;
+                        }
+                    });
+                });
+
+                allTimeVoteTotals = totals;
+                updateLeaderboardUI();
+            } catch (error) {
+                console.error('Error loading all-time vote totals:', error);
+            }
+        }
+
+        // Update leaderboard UI
+        function updateLeaderboardUI() {
+            const tbody = document.getElementById('leaderboardBody');
+            if (!tbody) return;
+
+            const sortedPlayers = Object.entries(allTimeVoteTotals)
+                .sort((a, b) => b[1].best - a[1].best);
+
+            if (sortedPlayers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">No votes yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = sortedPlayers.map(([name, stats], index) => {
+                const bestHighlight = index === 0 && stats.best > 0 ? 'background: #d4edda;' : '';
+                const worstLeader = sortedPlayers.slice().sort((a, b) => b[1].worst - a[1].worst)[0];
+                const worstHighlight = name === worstLeader[0] && stats.worst > 0 ? 'background: #f8d7da;' : '';
+
+                return `
+                    <tr>
+                        <td style="padding: 12px; font-weight: 600; ${bestHighlight}">${name}</td>
+                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #27ae60; ${bestHighlight}">${stats.best}</td>
+                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #e74c3c; ${worstHighlight}">${stats.worst}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Setup realtime listener for today's votes
+        function setupTodayVotesListener() {
+            if (isDevMode) {
+                console.log('🔧 DEV MODE: Skipping today votes listener');
+                loadTodayVotesOnce();
+                return;
+            }
+
+            const today = getTodayDateString();
+            const todayDocRef = doc(db, 'dailyVotes', today);
+
+            if (votingUnsubscribe) {
+                votingUnsubscribe();
+            }
+
+            votingUnsubscribe = onSnapshot(todayDocRef, (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    todayVotes = docSnapshot.data().votes || {};
+                } else {
+                    todayVotes = {};
+                }
+                updateTodayStandingsUI();
+            }, (error) => {
+                console.error('Error in today votes listener:', error);
+            });
+        }
+
+        // Load today's votes once (for dev mode)
+        async function loadTodayVotesOnce() {
+            try {
+                const today = getTodayDateString();
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const todayDoc = votesSnapshot.docs.find(d => d.id === today);
+
+                if (todayDoc) {
+                    todayVotes = todayDoc.data().votes || {};
+                } else {
+                    todayVotes = {};
+                }
+                updateTodayStandingsUI();
+            } catch (error) {
+                console.error('Error loading today votes:', error);
+            }
+        }
+
+        // Update today's standings UI
+        function updateTodayStandingsUI() {
+            const voteCount = document.getElementById('todayVoteCount');
+            const bestStandings = document.getElementById('todayBestStandings');
+            const worstStandings = document.getElementById('todayWorstStandings');
+
+            if (!voteCount || !bestStandings || !worstStandings) return;
+
+            const totalVotes = Object.keys(todayVotes).length;
+            const totalPlayers = allPlayers.length;
+
+            voteCount.textContent = `${totalVotes}/${totalPlayers} voted`;
+
+            // Calculate standings
+            const bestCounts = {};
+            const worstCounts = {};
+
+            Object.values(todayVotes).forEach(vote => {
+                if (vote.best) {
+                    bestCounts[vote.best] = (bestCounts[vote.best] || 0) + 1;
+                }
+                if (vote.worst) {
+                    worstCounts[vote.worst] = (worstCounts[vote.worst] || 0) + 1;
+                }
+            });
+
+            // Sort and display
+            const sortedBest = Object.entries(bestCounts).sort((a, b) => b[1] - a[1]);
+            const sortedWorst = Object.entries(worstCounts).sort((a, b) => b[1] - a[1]);
+
+            if (sortedBest.length === 0) {
+                bestStandings.innerHTML = '<div style="text-align: center; color: #999; padding: 10px;">No votes yet</div>';
+            } else {
+                bestStandings.innerHTML = sortedBest.map(([name, count], i) => `
+                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: #c3e6cb; border-radius: 4px;' : ''}">
+                        <span>${name}</span>
+                        <span>${count}</span>
+                    </div>
+                `).join('');
+            }
+
+            if (sortedWorst.length === 0) {
+                worstStandings.innerHTML = '<div style="text-align: center; color: #999; padding: 10px;">No votes yet</div>';
+            } else {
+                worstStandings.innerHTML = sortedWorst.map(([name, count], i) => `
+                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: #f5c6cb; border-radius: 4px;' : ''}">
+                        <span>${name}</span>
+                        <span>${count}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Track if we're in edit mode
+        let isEditingVote = false;
+        let editingVoterName = null;
+
+        // Check if user has already voted today and show appropriate UI
+        function checkExistingVote() {
+            const voterName = document.getElementById('votingVoterName').value;
+            const submitBtn = document.getElementById('submitVoteBtn');
+            const bestSelect = document.getElementById('votingBestPlayer');
+            const worstSelect = document.getElementById('votingWorstPlayer');
+            const formContainer = document.getElementById('votingFormContainer');
+            const summaryCard = document.getElementById('voteSummaryCard');
+
+            if (!voterName) {
+                // No name selected - show form, hide summary
+                if (formContainer) formContainer.style.display = 'block';
+                if (summaryCard) summaryCard.style.display = 'none';
+                return;
+            }
+
+            const existingVote = todayVotes[voterName];
+
+            if (existingVote && !isEditingVote) {
+                // User has voted - show summary, hide form
+                showVoteSummary(voterName, existingVote);
+            } else if (existingVote && isEditingVote) {
+                // User is editing their vote
+                submitBtn.textContent = 'Update Vote';
+                if (bestSelect) bestSelect.value = existingVote.best;
+                if (worstSelect) worstSelect.value = existingVote.worst;
+            } else {
+                // New vote
+                if (formContainer) formContainer.style.display = 'block';
+                if (summaryCard) summaryCard.style.display = 'none';
+                submitBtn.textContent = 'Submit Vote';
+                if (bestSelect) bestSelect.value = '';
+                if (worstSelect) worstSelect.value = '';
+            }
+        }
+
+        // Show vote summary card
+        function showVoteSummary(voterName, vote) {
+            const formContainer = document.getElementById('votingFormContainer');
+            const summaryCard = document.getElementById('voteSummaryCard');
+            const summaryVoter = document.getElementById('voteSummaryVoter');
+            const summaryBest = document.getElementById('voteSummaryBest');
+            const summaryWorst = document.getElementById('voteSummaryWorst');
+
+            if (formContainer) formContainer.style.display = 'none';
+            if (summaryCard) summaryCard.style.display = 'block';
+            if (summaryVoter) summaryVoter.textContent = `Voted as: ${voterName}`;
+            if (summaryBest) summaryBest.textContent = vote.best;
+            if (summaryWorst) summaryWorst.textContent = vote.worst;
+
+            // Store who is viewing for edit purposes
+            editingVoterName = voterName;
+        }
+
+        // Enable vote editing
+        function enableVoteEdit() {
+            const formContainer = document.getElementById('votingFormContainer');
+            const summaryCard = document.getElementById('voteSummaryCard');
+            const voterSelect = document.getElementById('votingVoterName');
+            const formTitle = document.getElementById('votingFormTitle');
+            const cancelBtn = document.getElementById('cancelEditBtn');
+            const submitBtn = document.getElementById('submitVoteBtn');
+
+            isEditingVote = true;
+
+            // Show form, hide summary
+            if (formContainer) formContainer.style.display = 'block';
+            if (summaryCard) summaryCard.style.display = 'none';
+
+            // Lock voter name to prevent editing others' votes
+            if (voterSelect) {
+                voterSelect.value = editingVoterName;
+                voterSelect.disabled = true;
+            }
+
+            // Update UI for edit mode
+            if (formTitle) formTitle.textContent = '✏️ Edit Your Vote';
+            if (cancelBtn) cancelBtn.style.display = 'block';
+            if (submitBtn) submitBtn.textContent = 'Update Vote';
+
+            // Pre-fill current selections
+            const existingVote = todayVotes[editingVoterName];
+            if (existingVote) {
+                const bestSelect = document.getElementById('votingBestPlayer');
+                const worstSelect = document.getElementById('votingWorstPlayer');
+                if (bestSelect) bestSelect.value = existingVote.best;
+                if (worstSelect) worstSelect.value = existingVote.worst;
+            }
+        }
+
+        // Cancel vote editing
+        function cancelVoteEdit() {
+            const voterSelect = document.getElementById('votingVoterName');
+            const formTitle = document.getElementById('votingFormTitle');
+            const cancelBtn = document.getElementById('cancelEditBtn');
+
+            isEditingVote = false;
+
+            // Unlock voter name
+            if (voterSelect) voterSelect.disabled = false;
+
+            // Reset UI
+            if (formTitle) formTitle.textContent = '🗳️ Cast Your Vote';
+            if (cancelBtn) cancelBtn.style.display = 'none';
+
+            // Show summary again
+            const existingVote = todayVotes[editingVoterName];
+            if (existingVote) {
+                showVoteSummary(editingVoterName, existingVote);
+            }
+        }
+
+        // Submit or update vote
+        async function submitVote() {
+            const voterName = document.getElementById('votingVoterName').value;
+            const bestPlayer = document.getElementById('votingBestPlayer').value;
+            const worstPlayer = document.getElementById('votingWorstPlayer').value;
+            const errorEl = document.getElementById('voteValidationError');
+
+            // Validation
+            if (!voterName || !bestPlayer || !worstPlayer) {
+                if (errorEl) {
+                    errorEl.textContent = 'Please fill in all fields';
+                    errorEl.style.display = 'block';
+                }
+                return;
+            }
+
+            // Can't vote same person for both
+            if (bestPlayer === worstPlayer) {
+                if (errorEl) {
+                    errorEl.textContent = "You can't vote for the same person as both best AND worst!";
+                    errorEl.style.display = 'block';
+                }
+                return;
+            }
+
+            // Can't vote yourself as best player
+            if (voterName === bestPlayer) {
+                alert("You can't vote for yourself as best player!");
+                if (errorEl) {
+                    errorEl.textContent = "You can't vote for yourself as best player!";
+                    errorEl.style.display = 'block';
+                }
+                return;
+            }
+
+            // Check if voting is open
+            if (!isVotingOpen()) {
+                if (errorEl) {
+                    errorEl.textContent = 'Voting is closed. Opens at 6:00 AM';
+                    errorEl.style.display = 'block';
+                }
+                return;
+            }
+
+            if (errorEl) errorEl.style.display = 'none';
+
+            try {
+                showLoading('Submitting vote...');
+
+                const today = getTodayDateString();
+                const todayDocRef = doc(db, 'dailyVotes', today);
+
+                // Get current votes
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const todayDoc = votesSnapshot.docs.find(d => d.id === today);
+
+                let currentVotes = {};
+                if (todayDoc) {
+                    currentVotes = todayDoc.data().votes || {};
+                }
+
+                // Add/update this vote
+                currentVotes[voterName] = {
+                    best: bestPlayer,
+                    worst: worstPlayer,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Save to Firestore
+                await setDoc(todayDocRef, { votes: currentVotes, date: today });
+
+                // Update local state
+                todayVotes = currentVotes;
+
+                hideLoading();
+                showToast('Vote submitted successfully!', 'success');
+
+                // Reset edit mode
+                isEditingVote = false;
+                editingVoterName = voterName;
+
+                // Unlock and reset voter dropdown
+                const voterSelect = document.getElementById('votingVoterName');
+                const formTitle = document.getElementById('votingFormTitle');
+                const cancelBtn = document.getElementById('cancelEditBtn');
+                if (voterSelect) voterSelect.disabled = false;
+                if (formTitle) formTitle.textContent = '🗳️ Cast Your Vote';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+
+                // Show vote summary
+                showVoteSummary(voterName, { best: bestPlayer, worst: worstPlayer });
+
+                // Refresh UI
+                updateTodayStandingsUI();
+
+                // Refresh all-time totals
+                await loadAllTimeVoteTotals();
+
+            } catch (error) {
+                hideLoading();
+                console.error('Error submitting vote:', error);
+                showToast('Error submitting vote: ' + error.message, 'error');
+            }
+        }
+
+        // Update all voting UI elements
+        function updateVotingUI() {
+            updateVotingDropdowns();
+            updateVotingStatus();
+            updateLastNightResultsUI();
+            updateTodayStandingsUI();
+            updateLeaderboardUI();
+            updateVoteAdminSection();
+        }
+
+        // =====================================================
+        // ADMIN VOTE MANAGEMENT FUNCTIONS
+        // =====================================================
+
+        // Update admin section visibility based on lock status
+        function updateVoteAdminSection() {
+            const adminSection = document.getElementById('voteAdminSection');
+            const dateInput = document.getElementById('adminVoteDate');
+
+            if (!adminSection) return;
+
+            if (isAppUnlocked) {
+                adminSection.style.display = 'block';
+                // Default to today's date
+                if (dateInput && !dateInput.value) {
+                    dateInput.value = getTodayDateString();
+                    loadVotesForDate();
+                }
+            } else {
+                adminSection.style.display = 'none';
+            }
+        }
+
+        // Load votes for a specific date (admin)
+        async function loadVotesForDate() {
+            const dateInput = document.getElementById('adminVoteDate');
+            const container = document.getElementById('adminVotesContainer');
+
+            if (!dateInput || !container) return;
+
+            const selectedDate = dateInput.value;
+            if (!selectedDate) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Select a date to view votes</div>';
+                return;
+            }
+
+            try {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Loading...</div>';
+
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const dateDoc = votesSnapshot.docs.find(d => d.id === selectedDate);
+
+                if (!dateDoc || !dateDoc.data().votes || Object.keys(dateDoc.data().votes).length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No votes for this date</div>';
+                    return;
+                }
+
+                const votes = dateDoc.data().votes;
+                const voteEntries = Object.entries(votes);
+
+                container.innerHTML = `
+                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">${voteEntries.length} vote(s) found</div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Voter</th>
+                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Best</th>
+                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Worst</th>
+                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${voteEntries.map(([voter, vote]) => `
+                                <tr>
+                                    <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: 600;">${voter}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #27ae60;">${vote.best}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #e74c3c;">${vote.worst}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">
+                                        <button class="btn btn-small" onclick="openVoteEditModal('${selectedDate}', '${voter}')" style="padding: 5px 10px; margin-right: 5px;">✏️</button>
+                                        <button class="btn btn-small btn-danger" onclick="deleteVote('${selectedDate}', '${voter}')" style="padding: 5px 10px;">🗑️</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+            } catch (error) {
+                console.error('Error loading votes for date:', error);
+                container.innerHTML = '<div style="text-align: center; color: #e74c3c; padding: 20px;">Error loading votes</div>';
+            }
+        }
+
+        // Open vote edit modal
+        function openVoteEditModal(date, voter) {
+            const modal = document.getElementById('voteEditModal');
+            const dateInput = document.getElementById('editVoteDate');
+            const voterInput = document.getElementById('editVoteVoter');
+            const voterDisplay = document.getElementById('editVoteVoterDisplay');
+            const bestSelect = document.getElementById('editVoteBest');
+            const worstSelect = document.getElementById('editVoteWorst');
+
+            if (!modal) return;
+
+            // Set hidden values
+            dateInput.value = date;
+            voterInput.value = voter;
+            voterDisplay.value = voter;
+
+            // Populate player dropdowns
+            const playerOptions = allPlayers.map(p =>
+                `<option value="${p.name}">${p.name}</option>`
+            ).join('');
+            bestSelect.innerHTML = playerOptions;
+            worstSelect.innerHTML = playerOptions;
+
+            // Load current vote values
+            loadVoteForEdit(date, voter);
+
+            modal.style.display = 'flex';
+        }
+
+        // Load vote data for editing
+        async function loadVoteForEdit(date, voter) {
+            try {
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const dateDoc = votesSnapshot.docs.find(d => d.id === date);
+
+                if (dateDoc && dateDoc.data().votes && dateDoc.data().votes[voter]) {
+                    const vote = dateDoc.data().votes[voter];
+                    document.getElementById('editVoteBest').value = vote.best;
+                    document.getElementById('editVoteWorst').value = vote.worst;
+                }
+            } catch (error) {
+                console.error('Error loading vote for edit:', error);
+            }
+        }
+
+        // Close vote edit modal
+        function closeVoteEditModal() {
+            const modal = document.getElementById('voteEditModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // Save vote edit
+        async function saveVoteEdit() {
+            if (!isAppUnlocked) {
+                showToast('App must be unlocked to edit votes', 'error');
+                return;
+            }
+
+            const date = document.getElementById('editVoteDate').value;
+            const voter = document.getElementById('editVoteVoter').value;
+            const newBest = document.getElementById('editVoteBest').value;
+            const newWorst = document.getElementById('editVoteWorst').value;
+
+            if (newBest === newWorst) {
+                showToast("Can't vote same person for both best and worst", 'error');
+                return;
+            }
+
+            try {
+                showLoading('Saving changes...');
+
+                const dateDocRef = doc(db, 'dailyVotes', date);
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const dateDoc = votesSnapshot.docs.find(d => d.id === date);
+
+                if (!dateDoc) {
+                    hideLoading();
+                    showToast('Vote not found', 'error');
+                    return;
+                }
+
+                const currentVotes = dateDoc.data().votes || {};
+                currentVotes[voter] = {
+                    best: newBest,
+                    worst: newWorst,
+                    timestamp: new Date().toISOString(),
+                    editedBy: 'admin'
+                };
+
+                await setDoc(dateDocRef, { votes: currentVotes, date: date });
+
+                // Update local state if it's today
+                if (date === getTodayDateString()) {
+                    todayVotes = currentVotes;
+                    updateTodayStandingsUI();
+                }
+
+                hideLoading();
+                closeVoteEditModal();
+                showToast('Vote updated successfully', 'success');
+
+                // Refresh the admin table and leaderboard
+                loadVotesForDate();
+                await loadAllTimeVoteTotals();
+
+            } catch (error) {
+                hideLoading();
+                console.error('Error saving vote edit:', error);
+                showToast('Error saving changes: ' + error.message, 'error');
+            }
+        }
+
+        // Delete a vote
+        async function deleteVote(date, voter) {
+            if (!isAppUnlocked) {
+                showToast('App must be unlocked to delete votes', 'error');
+                return;
+            }
+
+            if (!confirm(`Delete ${voter}'s vote for ${date}?`)) {
+                return;
+            }
+
+            try {
+                showLoading('Deleting vote...');
+
+                const dateDocRef = doc(db, 'dailyVotes', date);
+                const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
+                const dateDoc = votesSnapshot.docs.find(d => d.id === date);
+
+                if (!dateDoc) {
+                    hideLoading();
+                    showToast('Vote not found', 'error');
+                    return;
+                }
+
+                const currentVotes = dateDoc.data().votes || {};
+                delete currentVotes[voter];
+
+                await setDoc(dateDocRef, { votes: currentVotes, date: date });
+
+                // Update local state if it's today
+                if (date === getTodayDateString()) {
+                    todayVotes = currentVotes;
+                    updateTodayStandingsUI();
+                }
+
+                hideLoading();
+                showToast('Vote deleted successfully', 'success');
+
+                // Refresh the admin table and leaderboard
+                loadVotesForDate();
+                await loadAllTimeVoteTotals();
+
+            } catch (error) {
+                hideLoading();
+                console.error('Error deleting vote:', error);
+                showToast('Error deleting vote: ' + error.message, 'error');
+            }
+        }
+
+        // Make voting functions available globally
+        window.submitVote = submitVote;
+        window.checkExistingVote = checkExistingVote;
+        window.enableVoteEdit = enableVoteEdit;
+        window.cancelVoteEdit = cancelVoteEdit;
+        window.loadVotesForDate = loadVotesForDate;
+        window.openVoteEditModal = openVoteEditModal;
+        window.closeVoteEditModal = closeVoteEditModal;
+        window.saveVoteEdit = saveVoteEdit;
+        window.deleteVote = deleteVote;
+
+        // ==========================================
+        // PRO CLUBS MATCH DATA FUNCTIONS
+        // ==========================================
+
+        let loggedMatchesCache = null;
+
+        // Log new matches from EA to Firestore
+        async function logNewMatches() {
+            const btn = document.getElementById('logMatchesBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ Logging...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${FUNCTIONS_URL}/logProClubsMatches`);
+                const data = await res.json();
+
+                if (data.data) {
+                    const { logged, skipped } = data.data;
+                    if (logged > 0) {
+                        showToast(`Logged ${logged} new matches!`, 'success');
+                        // Reload the match history
+                        await loadLoggedMatches();
+                    } else {
+                        showToast(`No new matches to log (${skipped} already logged)`, 'info');
+                    }
+                }
+            } catch (error) {
+                console.error('Error logging matches:', error);
+                showToast('Failed to log matches: ' + error.message, 'error');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Load logged match history from Firestore
+        async function loadLoggedMatches() {
+            try {
+                const res = await fetch(`${FUNCTIONS_URL}/getLoggedMatches?limit=100`);
+                const data = await res.json();
+
+                if (data.data) {
+                    loggedMatchesCache = data.data;
+                    renderMatchHistory();
+                    renderPlayerMappingTable(); // Update mapping table with EA players
+
+                    // Show last updated time
+                    const updateEl = document.getElementById('matchesLastUpdated');
+                    if (updateEl) {
+                        const now = new Date();
+                        updateEl.textContent = `Last refreshed: ${now.toLocaleTimeString()}`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading match history:', error);
+                showToast('Failed to load match history', 'error');
+            }
+        }
+
+        function renderMatchHistory() {
+            const container = document.getElementById('recentMatchesList');
+            const tbody = document.getElementById('matchHistoryBody');
+
+            if (!loggedMatchesCache || !loggedMatchesCache.matches || loggedMatchesCache.matches.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No matches logged yet. Click "Log New Matches" to start.</div>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No matches logged yet</td></tr>';
+                return;
+            }
+
+            const matches = loggedMatchesCache.matches;
+
+            // Render recent matches cards (top 5)
+            let cardsHtml = `<div style="text-align: center; color: #666; font-size: 0.85em; margin-bottom: 10px;">${matches.length} matches logged</div>`;
+
+            for (const match of matches.slice(0, 5)) {
+                const resultColor = match.result === 'WIN' ? '#27ae60' :
+                                   match.result === 'LOSS' ? '#e74c3c' : '#f39c12';
+                const resultBg = match.result === 'WIN' ? '#d4edda' :
+                                match.result === 'LOSS' ? '#f8d7da' : '#fff3cd';
+
+                const matchDate = match.timestamp ? new Date(match.timestamp).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                }) : 'Unknown date';
+
+                // Sort players by rating and show all with FULL names
+                const sortedPlayers = [...(match.players || [])].sort((a, b) => b.rating - a.rating);
+                const playerChips = sortedPlayers.map(p =>
+                    `<span style="display: inline-block; background: #f0f0f0; padding: 2px 8px; border-radius: 12px; margin: 2px; font-size: 0.8em;">
+                        ${p.name} <strong style="color: ${p.rating >= 7.5 ? '#27ae60' : p.rating >= 6.5 ? '#f39c12' : '#e74c3c'}">${p.rating.toFixed(1)}</strong>${p.mom ? ' ⭐' : ''}
+                    </span>`
+                ).join('');
+
+                cardsHtml += `
+                    <div style="background: ${resultBg}; border-radius: 10px; padding: 12px; border-left: 4px solid ${resultColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div>
+                                <span style="font-weight: bold; color: ${resultColor};">${match.result}</span>
+                                <span style="color: #666; font-size: 0.9em; margin-left: 8px;">${matchDate}</span>
+                            </div>
+                            <div style="font-size: 1.3em; font-weight: bold;">
+                                ${match.ourScore} - ${match.opponentScore}
+                            </div>
+                        </div>
+                        <div style="font-size: 0.95em; color: #333; margin-bottom: 6px;">
+                            vs <strong>${match.opponentName}</strong>
+                        </div>
+                        <div style="margin-top: 6px;">
+                            ${playerChips}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = cardsHtml;
+
+            // Render history table (all matches)
+            let tableHtml = '';
+            for (const match of matches) {
+                const resultColor = match.result === 'WIN' ? '#27ae60' :
+                                   match.result === 'LOSS' ? '#e74c3c' : '#f39c12';
+
+                const matchDate = match.timestamp ? new Date(match.timestamp).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: '2-digit'
+                }) : '-';
+
+                const matchTime = match.timestamp ? new Date(match.timestamp).toLocaleTimeString('en-GB', {
+                    hour: '2-digit', minute: '2-digit'
+                }) : '';
+
+                // Sort players by rating with FULL names and position
+                const sortedPlayers = [...(match.players || [])].sort((a, b) => b.rating - a.rating);
+                const playerRatings = sortedPlayers.map(p => {
+                    const ratingColor = p.rating >= 7.5 ? '#27ae60' : p.rating >= 6.5 ? '#f39c12' : '#e74c3c';
+                    const posLabel = p.position ? ` (${p.position})` : '';
+                    return `<span style="white-space: nowrap;">${p.name}${posLabel}: <strong style="color: ${ratingColor}">${p.rating.toFixed(1)}</strong>${p.mom ? ' ⭐' : ''}</span>`;
+                }).join(', ');
+
+                // Build ANY player dropdown options
+                const anyPlayerOptions = ['<option value="">-- Select --</option>'];
+                for (const player of allPlayers) {
+                    const selected = match.anyPlayer === player.name ? 'selected' : '';
+                    anyPlayerOptions.push(`<option value="${player.name}" ${selected}>${player.name}</option>`);
+                }
+
+                tableHtml += `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px; white-space: nowrap;">${matchDate}<br><span style="font-size: 0.8em; color: #666;">${matchTime}</span></td>
+                        <td style="padding: 8px; text-align: center;"><span style="font-weight: bold; color: ${resultColor};">${match.result}</span></td>
+                        <td style="padding: 8px; text-align: center; font-weight: bold;">${match.ourScore} - ${match.opponentScore}</td>
+                        <td style="padding: 8px;">${match.opponentName}</td>
+                        <td style="padding: 8px; font-size: 0.85em;">${playerRatings}</td>
+                        <td style="padding: 8px; text-align: center;">
+                            <select onchange="updateMatchAnyPlayer('${match.matchId}', this.value)" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.85em;">
+                                ${anyPlayerOptions.join('')}
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            tbody.innerHTML = tableHtml;
+        }
+
+        // Update ANY player for a match
+        async function updateMatchAnyPlayer(matchId, anyPlayer) {
+            try {
+                const response = await fetch(`${FUNCTIONS_URL}/updateMatchAnyPlayer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { matchId, anyPlayer } })
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error.message);
+                }
+
+                // Update local cache
+                if (loggedMatchesCache && loggedMatchesCache.matches) {
+                    const match = loggedMatchesCache.matches.find(m => m.matchId === matchId);
+                    if (match) {
+                        match.anyPlayer = anyPlayer || null;
+                    }
+                }
+
+                showNotification(`ANY player updated to: ${anyPlayer || 'None'}`, 'success');
+            } catch (error) {
+                console.error('Failed to update ANY player:', error);
+                showNotification('Failed to update ANY player: ' + error.message, 'error');
+            }
+        }
+        window.updateMatchAnyPlayer = updateMatchAnyPlayer;
+
+        // ==========================================
+        // PLAYER NAME MAPPING FUNCTIONS
+        // ==========================================
+
+        let playerMappings = {}; // { eaGamertag: appPlayerName }
+
+        // Load player mappings from Firestore
+        async function loadPlayerMappings() {
+            try {
+                const configDocs = await getDocs(collection(db, 'config'));
+                configDocs.forEach(configDoc => {
+                    if (configDoc.id === 'playerMappings') {
+                        playerMappings = configDoc.data().mappings || {};
+                    }
+                });
+                renderPlayerMappingTable();
+            } catch (error) {
+                console.error('Error loading player mappings:', error);
+            }
+        }
+
+        // Get unique EA player names from logged matches
+        function getUniqueEaPlayers() {
+            const players = new Set();
+            if (loggedMatchesCache && loggedMatchesCache.matches) {
+                for (const match of loggedMatchesCache.matches) {
+                    for (const p of (match.players || [])) {
+                        players.add(p.name);
+                    }
+                }
+            }
+            return Array.from(players).sort();
+        }
+
+        // Render player mapping table in Settings
+        function renderPlayerMappingTable() {
+            const container = document.getElementById('playerMappingTable');
+            if (!container) return;
+
+            const eaPlayers = getUniqueEaPlayers();
+
+            if (eaPlayers.length === 0) {
+                container.innerHTML = '<div style="color: #666; padding: 10px;">No EA players found. Log some matches first.</div>';
+                return;
+            }
+
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr><th style="text-align: left; padding: 8px; background: #f5f5f5;">EA Gamertag</th><th style="text-align: left; padding: 8px; background: #f5f5f5;">App Player Name</th></tr></thead>';
+            html += '<tbody>';
+
+            for (const eaName of eaPlayers) {
+                const currentMapping = playerMappings[eaName] || '';
+                html += `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px; font-weight: 500;">${eaName}</td>
+                        <td style="padding: 8px;">
+                            <select id="mapping_${eaName.replace(/[^a-zA-Z0-9]/g, '_')}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd;">
+                                <option value="">-- Not mapped --</option>
+                                ${allPlayers.map(p => `<option value="${p.name}" ${currentMapping === p.name ? 'selected' : ''}>${p.name}</option>`).join('')}
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Save player mappings to Firestore
+        async function savePlayerMappings() {
+            if (!adminPassword) {
+                showToast('Please unlock the app first in Settings', 'error');
+                return;
+            }
+
+            const eaPlayers = getUniqueEaPlayers();
+            const newMappings = {};
+
+            for (const eaName of eaPlayers) {
+                const selectId = `mapping_${eaName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const select = document.getElementById(selectId);
+                if (select && select.value) {
+                    newMappings[eaName] = select.value;
+                }
+            }
+
+            try {
+                await setDoc(doc(db, 'config', 'playerMappings'), { mappings: newMappings });
+                playerMappings = newMappings;
+                showToast('Player mappings saved!', 'success');
+            } catch (error) {
+                console.error('Error saving mappings:', error);
+                showToast('Failed to save mappings: ' + error.message, 'error');
+            }
+        }
+
+        // Make Pro Clubs functions globally available
+        window.logNewMatches = logNewMatches;
+        window.loadLoggedMatches = loadLoggedMatches;
+        window.savePlayerMappings = savePlayerMappings;
+        window.loadPlayerMappings = loadPlayerMappings;
 
         init();

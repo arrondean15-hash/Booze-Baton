@@ -927,3 +927,103 @@
             background: #e3f2fd;
             border-left: 4px solid #1D428A;
         }
+
+        /* =====================================================
+           VOTING SYSTEM STYLES
+           ===================================================== */
+
+        /* Voting leaderboard table */
+        #votingLeaderboard {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #votingLeaderboard th {
+            padding: 12px;
+            font-weight: 600;
+        }
+
+        #votingLeaderboard td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        #votingLeaderboard tr:last-child td {
+            border-bottom: none;
+        }
+
+        #votingLeaderboard tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        /* Voting status badge */
+        #votingStatusBanner {
+            transition: all 0.3s ease;
+        }
+
+        /* Today's standings grid */
+        #todayStandingsContainer .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 480px) {
+            #todayStandingsContainer .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Last night results banner animation */
+        #lastNightResults {
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Vote validation error */
+        #voteValidationError {
+            animation: shake 0.3s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Voting form styling */
+        #votingFormContainer select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        #votingFormContainer select:focus {
+            outline: none;
+            border-color: #FFCD00;
+        }
+
+        /* Current vote display */
+        #currentVoteDisplay {
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* Voting closed message */
+        #votingClosedMessage {
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+        }
