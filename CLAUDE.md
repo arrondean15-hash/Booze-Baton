@@ -132,11 +132,15 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 ## Recent Changes
 
 - **1 Feb 2026**:
+  - v2.10.0: UI improvements and EA stats integration
   - Moved ANY Player column to left of Match History table
   - Added "Void" option to ANY dropdown
   - Added EA Pro Clubs Stats card with void tracking
   - Auto-Update EAFC 26 feature (excludes void matches)
   - Redesigned player selection as tappable chips
   - Removed Recent Matches section (redundant with Match History)
+  - Upgraded Cloud Functions to Node.js 20 (Node 18 deprecated)
+  - Updated EA API headers (Chrome 131 User-Agent)
+  - Fixed cloud functions CORS and db initialization
 - **Feb 2026**: Extracted base64 logo to separate `logo.png` file (reduced index.html from 273KB to 42KB)
 - **Jan 2026**: v2.9.0 - EA Pro Clubs integration, match logging, ANY player tracking
