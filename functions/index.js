@@ -15,10 +15,16 @@ const EA_PLATFORM = 'common-gen5'; // PS5/Xbox Series X|S
 // Headers to mimic browser request (required by EA's WAF)
 const EA_API_HEADERS = {
   'Accept': 'application/json',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer': 'https://www.ea.com/',
-  'Origin': 'https://www.ea.com'
+  'Accept-Language': 'en-GB,en;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Referer': 'https://www.ea.com/games/ea-sports-fc/pro-clubs',
+  'Origin': 'https://www.ea.com',
+  'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"macOS"',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-site'
 };
 
 // Admin PIN configuration
