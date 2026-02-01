@@ -14,8 +14,8 @@
         const db = getFirestore(app);
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v2.9.0';
-        const LAST_UPDATED = '29 Jan 2026';
+        const APP_VERSION = 'v2.10.0';
+        const LAST_UPDATED = '1 Feb 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -953,9 +953,9 @@
                 e.preventDefault();
                 console.log('📝 Form submitted');
 
-                // Get selected players from checkboxes
-                const selectedCheckboxes = document.querySelectorAll('input[name="selectedPlayers"]:checked');
-                const selectedPlayers = Array.from(selectedCheckboxes).map(cb => cb.value);
+                // Get selected players from chips
+                const selectedChips = document.querySelectorAll('.player-chip.selected');
+                const selectedPlayers = Array.from(selectedChips).map(chip => chip.dataset.player);
 
                 if (selectedPlayers.length === 0) {
                     showToast('Please select at least one player', 'error');
@@ -999,6 +999,8 @@
 
                     hideLoading();
                     e.target.reset();
+                    // Clear selected chips
+                    document.querySelectorAll('.player-chip.selected').forEach(chip => chip.classList.remove('selected'));
                     setDefaultDate();
 
                     if (selectedPlayers.length === 1) {
@@ -1293,16 +1295,24 @@
                     playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px; font-size: 0.9em;">No players yet. Add players in the Manage tab.</div>';
                 } else {
                     playerCheckboxes.innerHTML = allPlayers.map(player => `
-                        <label style="display: flex; align-items: center; padding: 6px 8px; margin-bottom: 3px; cursor: pointer; border-radius: 4px; transition: background 0.15s;"
-                               onmouseover="this.style.background='#f5f5f5'"
-                               onmouseout="this.style.background='white'">
-                            <input type="checkbox" name="selectedPlayers" value="${player.name}"
-                                   style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
-                            <span style="font-size: 0.9em; color: #333;">${player.name}</span>
-                        </label>
+                        <div class="player-chip" onclick="togglePlayerChip(this)" data-player="${player.name}">
+                            <span>${player.name}</span>
+                        </div>
                     `).join('');
+                    // Add hidden inputs container
+                    if (!document.getElementById('selectedPlayersInputs')) {
+                        const inputsDiv = document.createElement('div');
+                        inputsDiv.id = 'selectedPlayersInputs';
+                        inputsDiv.style.display = 'none';
+                        playerCheckboxes.parentNode.appendChild(inputsDiv);
+                    }
                 }
             }
+
+            // Toggle player chip selection
+            window.togglePlayerChip = function(chip) {
+                chip.classList.toggle('selected');
+            };
 
             // Keep backwards compatibility for old select element if it exists
             const addFineSelect = document.getElementById('playerName');
@@ -4767,60 +4777,14 @@
         }
 
         function renderMatchHistory() {
-            const container = document.getElementById('recentMatchesList');
             const tbody = document.getElementById('matchHistoryBody');
 
             if (!loggedMatchesCache || !loggedMatchesCache.matches || loggedMatchesCache.matches.length === 0) {
-                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No matches logged yet. Click "Log New Matches" to start.</div>';
                 tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No matches logged yet</td></tr>';
                 return;
             }
 
             const matches = loggedMatchesCache.matches;
-
-            // Render recent matches cards (top 5)
-            let cardsHtml = `<div style="text-align: center; color: #666; font-size: 0.85em; margin-bottom: 10px;">${matches.length} matches logged</div>`;
-
-            for (const match of matches.slice(0, 5)) {
-                const resultColor = match.result === 'WIN' ? '#27ae60' :
-                                   match.result === 'LOSS' ? '#e74c3c' : '#f39c12';
-                const resultBg = match.result === 'WIN' ? '#d4edda' :
-                                match.result === 'LOSS' ? '#f8d7da' : '#fff3cd';
-
-                const matchDate = match.timestamp ? new Date(match.timestamp).toLocaleDateString('en-GB', {
-                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                }) : 'Unknown date';
-
-                // Sort players by rating and show all with FULL names
-                const sortedPlayers = [...(match.players || [])].sort((a, b) => b.rating - a.rating);
-                const playerChips = sortedPlayers.map(p =>
-                    `<span style="display: inline-block; background: #f0f0f0; padding: 2px 8px; border-radius: 12px; margin: 2px; font-size: 0.8em;">
-                        ${p.name} <strong style="color: ${p.rating >= 7.5 ? '#27ae60' : p.rating >= 6.5 ? '#f39c12' : '#e74c3c'}">${p.rating.toFixed(1)}</strong>${p.mom ? ' ⭐' : ''}
-                    </span>`
-                ).join('');
-
-                cardsHtml += `
-                    <div style="background: ${resultBg}; border-radius: 10px; padding: 12px; border-left: 4px solid ${resultColor};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <div>
-                                <span style="font-weight: bold; color: ${resultColor};">${match.result}</span>
-                                <span style="color: #666; font-size: 0.9em; margin-left: 8px;">${matchDate}</span>
-                            </div>
-                            <div style="font-size: 1.3em; font-weight: bold;">
-                                ${match.ourScore} - ${match.opponentScore}
-                            </div>
-                        </div>
-                        <div style="font-size: 0.95em; color: #333; margin-bottom: 6px;">
-                            vs <strong>${match.opponentName}</strong>
-                        </div>
-                        <div style="margin-top: 6px;">
-                            ${playerChips}
-                        </div>
-                    </div>
-                `;
-            }
-
-            container.innerHTML = cardsHtml;
 
             // Render history table (all matches)
             let tableHtml = '';
@@ -4846,6 +4810,7 @@
 
                 // Build ANY player dropdown options
                 const anyPlayerOptions = ['<option value="">-- Select --</option>'];
+                anyPlayerOptions.push(`<option value="Void" ${match.anyPlayer === 'Void' ? 'selected' : ''}>Void</option>`);
                 for (const player of allPlayers) {
                     const selected = match.anyPlayer === player.name ? 'selected' : '';
                     anyPlayerOptions.push(`<option value="${player.name}" ${selected}>${player.name}</option>`);
@@ -4854,15 +4819,15 @@
                 tableHtml += `
                     <tr style="border-bottom: 1px solid #eee;">
                         <td style="padding: 8px; white-space: nowrap;">${matchDate}<br><span style="font-size: 0.8em; color: #666;">${matchTime}</span></td>
+                        <td style="padding: 8px; text-align: center;">
+                            <select onchange="updateMatchAnyPlayer('${match.matchId}', this.value)" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.9em; min-width: 110px; cursor: pointer;">
+                                ${anyPlayerOptions.join('')}
+                            </select>
+                        </td>
                         <td style="padding: 8px; text-align: center;"><span style="font-weight: bold; color: ${resultColor};">${match.result}</span></td>
                         <td style="padding: 8px; text-align: center; font-weight: bold;">${match.ourScore} - ${match.opponentScore}</td>
                         <td style="padding: 8px;">${match.opponentName}</td>
                         <td style="padding: 8px; font-size: 0.85em;">${playerRatings}</td>
-                        <td style="padding: 8px; text-align: center;">
-                            <select onchange="updateMatchAnyPlayer('${match.matchId}', this.value)" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.85em;">
-                                ${anyPlayerOptions.join('')}
-                            </select>
-                        </td>
                     </tr>
                 `;
             }
@@ -4900,6 +4865,167 @@
             }
         }
         window.updateMatchAnyPlayer = updateMatchAnyPlayer;
+
+        // ==========================================
+        // EA PRO CLUBS STATS FUNCTIONS
+        // ==========================================
+
+        // Fetch games played from EA Pro Clubs API
+        async function fetchEAGamesPlayed() {
+            const btn = document.getElementById('fetchEABtn');
+            const container = document.getElementById('eaGamesPlayedList');
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Fetching...';
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Loading from EA servers...</div>';
+
+                const response = await fetch(`${FUNCTIONS_URL}/getProClubsSquad`);
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error.message || 'Failed to fetch');
+                }
+
+                // Response is wrapped in 'data' object
+                const data = result.data || result;
+
+                if (!data.members || data.members.length === 0) {
+                    container.innerHTML = '<div style="color: #666; padding: 10px;">No squad members found</div>';
+                    return;
+                }
+
+                // Filter to only mapped players and sort by games played
+                const mappedMembers = data.members
+                    .filter(member => playerMappings[member.name])
+                    .sort((a, b) => b.gamesPlayed - a.gamesPlayed);
+
+                if (mappedMembers.length === 0) {
+                    container.innerHTML = '<div style="color: #666; padding: 10px;">No mapped players found. Set up player mappings in Settings first.</div>';
+                    return;
+                }
+
+                // Count void matches per EA gamertag
+                const voidCountByEaName = {};
+                if (loggedMatchesCache && loggedMatchesCache.matches) {
+                    for (const match of loggedMatchesCache.matches) {
+                        if (match.anyPlayer === 'Void') {
+                            for (const p of (match.players || [])) {
+                                voidCountByEaName[p.name] = (voidCountByEaName[p.name] || 0) + 1;
+                            }
+                        }
+                    }
+                }
+
+                let html = '<table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">';
+                html += '<thead><tr style="background: #1D428A; color: #FFCD00;">';
+                html += '<th style="padding: 10px; text-align: left;">Player</th>';
+                html += '<th style="padding: 10px; text-align: center;">EA Games</th>';
+                html += '<th style="padding: 10px; text-align: center;">Void</th>';
+                html += '<th style="padding: 10px; text-align: center;">Adjusted</th>';
+                html += '</tr></thead><tbody>';
+
+                for (const member of mappedMembers) {
+                    const playerName = playerMappings[member.name];
+                    const voidCount = voidCountByEaName[member.name] || 0;
+                    const adjusted = member.gamesPlayed - voidCount;
+
+                    html += `<tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px; font-weight: bold;">${playerName}</td>
+                        <td style="padding: 8px; text-align: center;">${member.gamesPlayed}</td>
+                        <td style="padding: 8px; text-align: center; color: ${voidCount > 0 ? '#e74c3c' : '#999'};">${voidCount}</td>
+                        <td style="padding: 8px; text-align: center; font-weight: bold; color: #27ae60;">${adjusted}</td>
+                    </tr>`;
+                }
+
+                html += '</tbody></table>';
+                html += `<div style="font-size: 0.8em; color: #888; margin-top: 10px; text-align: right;">Last updated: ${new Date().toLocaleString('en-GB')}</div>`;
+
+                container.innerHTML = html;
+                showToast('EA stats loaded successfully', 'success');
+
+            } catch (error) {
+                console.error('Failed to fetch EA stats:', error);
+                container.innerHTML = `<div style="color: #e74c3c; padding: 10px;">Failed to load: ${error.message}</div>`;
+                showToast('Failed to fetch EA stats: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Fetch from EA';
+            }
+        }
+        window.fetchEAGamesPlayed = fetchEAGamesPlayed;
+
+        // Auto-update EAFC 26 games from EA data (excluding void matches)
+        async function autoUpdateEAFC26() {
+            const btn = document.getElementById('autoUpdateBtn');
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Updating...';
+
+                // Fetch EA data
+                const response = await fetch(`${FUNCTIONS_URL}/getProClubsSquad`);
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error.message || 'Failed to fetch');
+                }
+
+                const data = result.data || result;
+
+                if (!data.members || data.members.length === 0) {
+                    throw new Error('No squad members found');
+                }
+
+                // Count void matches per EA gamertag from logged matches
+                const voidCountByEaName = {};
+                if (loggedMatchesCache && loggedMatchesCache.matches) {
+                    for (const match of loggedMatchesCache.matches) {
+                        if (match.anyPlayer === 'Void') {
+                            // Count this void match for each player who participated
+                            for (const p of (match.players || [])) {
+                                voidCountByEaName[p.name] = (voidCountByEaName[p.name] || 0) + 1;
+                            }
+                        }
+                    }
+                }
+
+                let updatedCount = 0;
+
+                // Update each mapped player's EAFC 26 field
+                for (const member of data.members) {
+                    const appPlayerName = playerMappings[member.name];
+                    if (!appPlayerName) continue;
+
+                    const player = allPlayers.find(p => p.name === appPlayerName);
+                    if (!player) continue;
+
+                    // Calculate games: EA total minus void matches (by EA gamertag)
+                    const voidCount = voidCountByEaName[member.name] || 0;
+                    const adjustedGames = member.gamesPlayed - voidCount;
+
+                    player.eafc26 = adjustedGames;
+                    updatedCount++;
+                }
+
+                await savePlayers();
+                updateManagePlayersTable();
+                updateSettingsPlayersTable();
+
+                showToast(`Updated ${updatedCount} players (void matches excluded)`, 'success');
+
+                // Refresh the EA stats display
+                fetchEAGamesPlayed();
+
+            } catch (error) {
+                console.error('Failed to auto-update:', error);
+                showToast('Failed to auto-update: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Auto-Update EAFC 26';
+            }
+        }
+        window.autoUpdateEAFC26 = autoUpdateEAFC26;
 
         // ==========================================
         // PLAYER NAME MAPPING FUNCTIONS

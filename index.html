@@ -46,8 +46,8 @@
             <div class="card">
                 <form id="fineForm">
                     <div class="form-group">
-                        <label>Player Name(s) * <span style="font-size: 0.85em; color: #666;">(Select one or more)</span></label>
-                        <div id="playerCheckboxes" style="max-height: 140px; overflow-y: auto; border: 2px solid #e0e0e0; border-radius: 6px; padding: 6px; background: white;"></div>
+                        <label>Player Name(s) * <span style="font-size: 0.85em; color: #666;">(Tap to select)</span></label>
+                        <div id="playerCheckboxes" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;"></div>
                     </div>
 
                     <div class="form-group">
@@ -257,6 +257,25 @@
                     Update current season games played (EAFC 26 only)
                 </div>
                 <div id="managePlayersTable"></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 10px; color: #1D428A;">📊 EA Pro Clubs Stats</h3>
+                <div class="info-text" style="margin-bottom: 15px;">
+                    Live games played from EA servers (Benidorm United)
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="fetchEAGamesPlayed()" id="fetchEABtn">
+                        Fetch from EA
+                    </button>
+                    <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn">
+                        Auto-Update EAFC 26
+                    </button>
+                </div>
+                <div class="info-text" style="margin-top: 10px; font-size: 0.8em;">
+                    Auto-Update syncs EA games to EAFC 26 field (excludes Void matches)
+                </div>
+                <div id="eaGamesPlayedList" style="margin-top: 15px;"></div>
             </div>
         </div>
 
@@ -688,14 +707,6 @@
                 <div style="font-size: 0.8em; color: #888; margin-top: 4px;">Auto-logs daily at 1am • Manual log checks for new matches only</div>
             </div>
 
-            <!-- Recent Matches Cards -->
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">⚽ Recent Matches</h3>
-                <div id="recentMatchesList" style="display: flex; flex-direction: column; gap: 12px;">
-                    <div style="text-align: center; color: #666; padding: 20px;">Click "Log New Matches" to start logging</div>
-                </div>
-            </div>
-
             <!-- Match History Table -->
             <div class="card">
                 <h3 style="margin-bottom: 15px; color: #1D428A;">📋 Match History</h3>
@@ -704,11 +715,11 @@
                         <thead>
                             <tr>
                                 <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Date</th>
+                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00; min-width: 120px;">ANY Player</th>
                                 <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Result</th>
                                 <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Score</th>
                                 <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Opponent</th>
                                 <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Players & Ratings</th>
-                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">ANY Player</th>
                             </tr>
                         </thead>
                         <tbody id="matchHistoryBody">

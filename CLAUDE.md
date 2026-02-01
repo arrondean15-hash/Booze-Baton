@@ -112,7 +112,31 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 - Full history loaded on-demand with caching
 - Dev mode (`?dev=1` URL param) disables listeners for testing
 
+## Key Features
+
+### Match History Table
+- ANY Player dropdown moved to left of table for easier access
+- "Void" option in dropdown to exclude matches from stats calculations
+- Columns: Date, ANY Player, Result, Score, Opponent, Players & Ratings
+
+### EA Pro Clubs Stats (Manage Tab)
+- Fetches live games played from EA servers
+- Shows: Player, EA Games, Void count, Adjusted total
+- Auto-Update EAFC 26 button syncs EA games to player records (excludes void matches)
+- Only shows players with mappings configured in Settings
+
+### Player Selection (Add Fine)
+- Chip-style selection UI (tap to toggle)
+- Multi-select enabled for bulk fines
+
 ## Recent Changes
 
+- **1 Feb 2026**:
+  - Moved ANY Player column to left of Match History table
+  - Added "Void" option to ANY dropdown
+  - Added EA Pro Clubs Stats card with void tracking
+  - Auto-Update EAFC 26 feature (excludes void matches)
+  - Redesigned player selection as tappable chips
+  - Removed Recent Matches section (redundant with Match History)
 - **Feb 2026**: Extracted base64 logo to separate `logo.png` file (reduced index.html from 273KB to 42KB)
 - **Jan 2026**: v2.9.0 - EA Pro Clubs integration, match logging, ANY player tracking

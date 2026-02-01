@@ -185,6 +185,37 @@
             margin-right: 5px;
         }
 
+        .player-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 16px;
+            background: #f0f0f0;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            color: #333;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .player-chip:hover {
+            background: #e0e0e0;
+            border-color: #ccc;
+        }
+
+        .player-chip.selected {
+            background: #1D428A;
+            border-color: #1D428A;
+            color: white;
+        }
+
+        .player-chip.selected:hover {
+            background: #15326a;
+            border-color: #15326a;
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
