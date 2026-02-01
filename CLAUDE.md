@@ -44,9 +44,34 @@ Fetches match data from EA's Pro Clubs API for club ID `21853` (Benidorm United)
 
 Located in `functions/index.js`. All admin functions require password validation.
 
+**Admin Functions** (onRequest with CORS):
+- `addFine` - Add a new fine
+- `deleteFine` - Delete a fine
+- `updateFine` - Update fine (e.g., mark as paid)
+- `deleteAllFines` - Delete all fines
+- `addBatonEntry` - Add baton transfer entry
+- `deleteBatonEntry` - Delete baton entry
+- `saveTeam` - Save team to known_teams
+- `setBatonHolder` - Set current baton holder
+- `updatePlayers` - Update players list
+- `updateFineReasons` - Update fine reasons list
 - `searchTeams` - Search football teams via API-Football
+
+**Public Functions** (onRequest):
+- `getProClubsMatches` - Get EA Pro Clubs match history
+- `getProClubsSquad` - Get EA Pro Clubs squad stats
+- `getProClubsInfo` - Get EA Pro Clubs club info
+- `getLoggedMatches` - Get logged matches from Firestore
+- `updateMatchAnyPlayer` - Update ANY player for a match
+- `logProClubsMatches` - Manual match logging trigger
+- `relogAllMatches` - Clear and re-log all matches
+
+**Callable Functions** (onCall - used internally):
 - `getLatestCompetitiveMatch` - Get recent match for a team
-- EA Pro Clubs functions for match history and player stats
+- `updateBaton` - Check and update baton based on match results
+
+**Scheduled**:
+- `scheduledMatchLog` - Runs daily at 1am UK time
 
 ## Firebase Config
 
@@ -132,6 +157,7 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 ## Recent Changes
 
 - **1 Feb 2026**:
+  - v2.10.1: Fixed Cloud Functions - converted admin functions from `onCall` to `onRequest` to work with direct HTTP fetch calls from frontend
   - v2.10.0: UI improvements and EA stats integration
   - Moved ANY Player column to left of Match History table
   - Added "Void" option to ANY dropdown
@@ -144,3 +170,8 @@ The app limits Firestore realtime listeners to prevent excessive reads:
   - Fixed cloud functions CORS and db initialization
 - **Feb 2026**: Extracted base64 logo to separate `logo.png` file (reduced index.html from 273KB to 42KB)
 - **Jan 2026**: v2.9.0 - EA Pro Clubs integration, match logging, ANY player tracking
+
+## Known Deprecations
+
+- **Node.js 20**: Deprecated April 2026, decommissioned October 2026 - upgrade to Node.js 22
+- **functions.config()**: Deprecated March 2026 - migrate to params package

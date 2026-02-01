@@ -14,7 +14,7 @@
         const db = getFirestore(app);
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v2.10.0';
+        const APP_VERSION = 'v2.10.1';
         const LAST_UPDATED = '1 Feb 2026';
 
         // Cloud Functions base URL

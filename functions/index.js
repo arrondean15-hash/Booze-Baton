@@ -39,7 +39,7 @@ const EA_API_HEADERS = {
 // IMPORTANT: Password must be set in Firebase config, not in code
 const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN;
 
-// Helper function to validate admin access
+// Helper function to validate admin access (for onCall functions)
 function validateAdmin(password) {
   if (!ADMIN_PIN) {
     throw new functions.https.HttpsError(
@@ -53,6 +53,19 @@ function validateAdmin(password) {
       'Invalid admin password'
     );
   }
+}
+
+// Helper function to validate admin access (for onRequest functions)
+function validateAdminRequest(password, res) {
+  if (!ADMIN_PIN) {
+    sendError(res, 500, 'failed-precondition', 'Admin PIN not configured');
+    return false;
+  }
+  if (!password || password !== ADMIN_PIN) {
+    sendError(res, 403, 'permission-denied', 'Invalid admin password');
+    return false;
+  }
+  return true;
 }
 
 // CORS helper for HTTP functions
@@ -117,18 +130,16 @@ async function callFootballAPI(endpoint, params = {}) {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Array} Array of team objects
  */
-exports.searchTeams = functions.https.onCall(async (data, context) => {
-  try {
-    const { query, adminPassword } = data;
+exports.searchTeams = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
-    // Validate admin access
-    validateAdmin(adminPassword);
+  try {
+    const { query, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Query parameter is required and must be a non-empty string'
-      );
+      return sendError(res, 400, 'invalid-argument', 'Query parameter is required and must be a non-empty string');
     }
 
     functions.logger.info(`Searching teams with query: ${query}`);
@@ -136,7 +147,7 @@ exports.searchTeams = functions.https.onCall(async (data, context) => {
     const result = await callFootballAPI('teams', { search: query.trim() });
 
     if (!result.response || !Array.isArray(result.response)) {
-      return [];
+      return sendResponse(res, 200, []);
     }
 
     // Transform the response to a compact format
@@ -149,19 +160,11 @@ exports.searchTeams = functions.https.onCall(async (data, context) => {
     }));
 
     functions.logger.info(`Found ${teams.length} teams for query: ${query}`);
-    return teams;
+    sendResponse(res, 200, teams);
 
   } catch (error) {
     functions.logger.error('Error in searchTeams:', error);
-
-    if (error instanceof functions.https.HttpsError) {
-      throw error;
-    }
-
-    throw new functions.https.HttpsError(
-      'internal',
-      `Failed to search teams: ${error.message}`
-    );
+    sendError(res, 500, 'internal', `Failed to search teams: ${error.message}`);
   }
 });
 
@@ -510,29 +513,25 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Result with fine ID
  */
-exports.addFine = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.addFine = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { fine, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { fine, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!fine || typeof fine !== 'object') {
-      throw new functions.https.HttpsError('invalid-argument', 'Fine object is required');
+      return sendError(res, 400, 'invalid-argument', 'Fine object is required');
     }
 
     functions.logger.info('Adding fine:', fine);
     const docRef = await db.collection('fines').add(fine);
 
-    return { success: true, fineId: docRef.id };
+    sendResponse(res, 200, { success: true, fineId: docRef.id });
   } catch (error) {
     functions.logger.error('Error in addFine:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to add fine: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to add fine: ${error.message}`);
   }
 });
 
@@ -545,29 +544,25 @@ exports.addFine = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.deleteFine = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.deleteFine = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { fineId, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { fineId, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!fineId || typeof fineId !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'Fine ID is required');
+      return sendError(res, 400, 'invalid-argument', 'Fine ID is required');
     }
 
     functions.logger.info('Deleting fine:', fineId);
     await db.collection('fines').doc(fineId).delete();
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in deleteFine:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to delete fine: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to delete fine: ${error.message}`);
   }
 });
 
@@ -581,32 +576,28 @@ exports.deleteFine = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.updateFine = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.updateFine = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { fineId, updates, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { fineId, updates, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!fineId || typeof fineId !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'Fine ID is required');
+      return sendError(res, 400, 'invalid-argument', 'Fine ID is required');
     }
     if (!updates || typeof updates !== 'object') {
-      throw new functions.https.HttpsError('invalid-argument', 'Updates object is required');
+      return sendError(res, 400, 'invalid-argument', 'Updates object is required');
     }
 
     functions.logger.info('Updating fine:', fineId, updates);
     await db.collection('fines').doc(fineId).update(updates);
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in updateFine:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to update fine: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to update fine: ${error.message}`);
   }
 });
 
@@ -619,29 +610,25 @@ exports.updateFine = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Result with entry ID
  */
-exports.addBatonEntry = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.addBatonEntry = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { entry, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { entry, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!entry || typeof entry !== 'object') {
-      throw new functions.https.HttpsError('invalid-argument', 'Entry object is required');
+      return sendError(res, 400, 'invalid-argument', 'Entry object is required');
     }
 
     functions.logger.info('Adding baton entry:', entry);
     const docRef = await db.collection('baton').add(entry);
 
-    return { success: true, entryId: docRef.id };
+    sendResponse(res, 200, { success: true, entryId: docRef.id });
   } catch (error) {
     functions.logger.error('Error in addBatonEntry:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to add baton entry: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to add baton entry: ${error.message}`);
   }
 });
 
@@ -654,29 +641,25 @@ exports.addBatonEntry = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.deleteBatonEntry = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.deleteBatonEntry = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { entryId, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { entryId, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!entryId || typeof entryId !== 'string') {
-      throw new functions.https.HttpsError('invalid-argument', 'Entry ID is required');
+      return sendError(res, 400, 'invalid-argument', 'Entry ID is required');
     }
 
     functions.logger.info('Deleting baton entry:', entryId);
     await db.collection('baton').doc(entryId).delete();
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in deleteBatonEntry:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to delete baton entry: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to delete baton entry: ${error.message}`);
   }
 });
 
@@ -689,29 +672,25 @@ exports.deleteBatonEntry = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.saveTeam = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.saveTeam = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { team, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { team, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!team || typeof team !== 'object' || !team.teamId) {
-      throw new functions.https.HttpsError('invalid-argument', 'Valid team object with teamId is required');
+      return sendError(res, 400, 'invalid-argument', 'Valid team object with teamId is required');
     }
 
     functions.logger.info('Saving team:', team);
     await db.collection('known_teams').doc(String(team.teamId)).set(team);
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in saveTeam:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to save team: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to save team: ${error.message}`);
   }
 });
 
@@ -724,29 +703,25 @@ exports.saveTeam = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.setBatonHolder = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.setBatonHolder = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { holder, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { holder, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!holder || typeof holder !== 'object') {
-      throw new functions.https.HttpsError('invalid-argument', 'Holder object is required');
+      return sendError(res, 400, 'invalid-argument', 'Holder object is required');
     }
 
     functions.logger.info('Setting baton holder:', holder);
     await db.collection('baton_current').doc('holder').set(holder);
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in setBatonHolder:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to set baton holder: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to set baton holder: ${error.message}`);
   }
 });
 
@@ -759,29 +734,25 @@ exports.setBatonHolder = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.updatePlayers = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.updatePlayers = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { players, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { players, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!Array.isArray(players)) {
-      throw new functions.https.HttpsError('invalid-argument', 'Players must be an array');
+      return sendError(res, 400, 'invalid-argument', 'Players must be an array');
     }
 
     functions.logger.info('Updating players:', players);
     await db.collection('config').doc('players').set({ list: players });
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in updatePlayers:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to update players: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to update players: ${error.message}`);
   }
 });
 
@@ -794,29 +765,25 @@ exports.updatePlayers = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status
  */
-exports.updateFineReasons = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.updateFineReasons = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { fineReasons, adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { fineReasons, adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     if (!Array.isArray(fineReasons)) {
-      throw new functions.https.HttpsError('invalid-argument', 'Fine reasons must be an array');
+      return sendError(res, 400, 'invalid-argument', 'Fine reasons must be an array');
     }
 
     functions.logger.info('Updating fine reasons:', fineReasons);
     await db.collection('config').doc('fineReasons').set({ list: fineReasons });
 
-    return { success: true };
+    sendResponse(res, 200, { success: true });
   } catch (error) {
     functions.logger.error('Error in updateFineReasons:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to update fine reasons: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to update fine reasons: ${error.message}`);
   }
 });
 
@@ -828,16 +795,13 @@ exports.updateFineReasons = functions.https.onCall(async (data, context) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Success status with count
  */
-exports.deleteAllFines = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-  const db = admin.firestore();
+exports.deleteAllFines = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { adminPassword } = data;
-    validateAdmin(adminPassword);
+    const { adminPassword } = req.body;
+
+    if (!validateAdminRequest(adminPassword, res)) return;
 
     functions.logger.info('Deleting all fines');
     const snapshot = await db.collection('fines').get();
@@ -852,11 +816,10 @@ exports.deleteAllFines = functions.https.onCall(async (data, context) => {
     await batch.commit();
     functions.logger.info(`Deleted ${count} fines`);
 
-    return { success: true, count };
+    sendResponse(res, 200, { success: true, count });
   } catch (error) {
     functions.logger.error('Error in deleteAllFines:', error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Failed to delete all fines: ${error.message}`);
+    sendError(res, 500, 'internal', `Failed to delete all fines: ${error.message}`);
   }
 });
 
