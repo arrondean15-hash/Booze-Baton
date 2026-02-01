@@ -1,5 +1,12 @@
 const functions = require('firebase-functions');
 const fetch = require('node-fetch');
+const admin = require('firebase-admin');
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
 
 // API-Football configuration
 // Get API key from environment variable
@@ -46,6 +53,29 @@ function validateAdmin(password) {
       'Invalid admin password'
     );
   }
+}
+
+// CORS helper for HTTP functions
+function handleCors(req, res) {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return true;
+  }
+  return false;
+}
+
+// Helper to send JSON response
+function sendResponse(res, status, data) {
+  res.status(status).json({ data });
+}
+
+// Helper to send error response
+function sendError(res, status, code, message) {
+  res.status(status).json({ error: { code, message } });
 }
 
 // Helper function to make API calls
