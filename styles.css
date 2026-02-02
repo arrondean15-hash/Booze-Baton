@@ -185,6 +185,21 @@
             margin-right: 5px;
         }
 
+        /* Checkbox styling for multi-select */
+        .fine-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #1D428A;
+        }
+
+        #selectAllFines {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #1D428A;
+        }
+
         .player-chip {
             display: inline-flex;
             align-items: center;

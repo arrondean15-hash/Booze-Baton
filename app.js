@@ -14,8 +14,8 @@
         const db = getFirestore(app);
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v2.10.1';
-        const LAST_UPDATED = '1 Feb 2026';
+        const APP_VERSION = 'v2.11.0';
+        const LAST_UPDATED = '2 Feb 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -73,6 +73,7 @@
         let batonHistory = [];
         let currentPaidFineId = null;
         let currentDateRangeFilter = 'all';
+        let selectedFineIds = new Set(); // For multi-select in History tab
 
         // Initialize date range filter variables
         window.dateRangeStart = null;
@@ -2079,6 +2080,10 @@
                 refreshBtn.textContent = '⏳ Refreshing...';
             }
 
+            // Clear selection before refresh
+            selectedFineIds.clear();
+            updateBulkActionBar();
+
             const success = await fetchFullHistory();
 
             if (refreshBtn) {
@@ -2115,6 +2120,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllFines" onchange="toggleSelectAll(this.checked)" title="Select all visible"></th>
                                 <th>Date</th>
                                 <th>Player</th>
                                 <th>Reason</th>
@@ -2125,7 +2131,8 @@
                         </thead>
                         <tbody>
                             ${sortedFines.map(fine => `
-                                <tr data-full-reason="${fine.reason}">
+                                <tr data-fine-id="${fine.id}" data-full-reason="${fine.reason}">
+                                    <td><input type="checkbox" class="fine-checkbox" data-id="${fine.id}" onchange="toggleFineSelection('${fine.id}')" ${selectedFineIds.has(fine.id) ? 'checked' : ''}></td>
                                     <td>${formatDateDDMMYYYY(fine.date)}</td>
                                     <td>${fine.playerName}</td>
                                     <td style="font-size: 0.85em;">${fine.reason.substring(0, 30)}${fine.reason.length > 30 ? '...' : ''}</td>
@@ -2147,6 +2154,9 @@
                     </table>
                 </div>
             `;
+
+            // Update bulk action bar visibility
+            updateBulkActionBar();
         }
 
         function updatePlayers() {
@@ -2518,7 +2528,7 @@
         async function confirmUnpaid(id) {
             try {
                 const password = await getAdminPassword('marking fine as unpaid');
-                
+
                 await callFunction('updateFine', {
                     fineId: id,
                     updates: { paid: false, paidDate: null },
@@ -2529,6 +2539,162 @@
                 alert('❌ Failed to update');
             }
         }
+
+        // ==========================================
+        // MULTI-SELECT BULK ACTIONS
+        // ==========================================
+
+        function toggleFineSelection(fineId) {
+            if (selectedFineIds.has(fineId)) {
+                selectedFineIds.delete(fineId);
+            } else {
+                selectedFineIds.add(fineId);
+            }
+            updateBulkActionBar();
+            updateSelectAllCheckbox();
+        }
+        window.toggleFineSelection = toggleFineSelection;
+
+        function toggleSelectAll(checked) {
+            const visibleCheckboxes = document.querySelectorAll('#historyContent tbody tr:not([style*="display: none"]) .fine-checkbox');
+            visibleCheckboxes.forEach(cb => {
+                const fineId = cb.dataset.id;
+                if (checked) {
+                    selectedFineIds.add(fineId);
+                    cb.checked = true;
+                } else {
+                    selectedFineIds.delete(fineId);
+                    cb.checked = false;
+                }
+            });
+            updateBulkActionBar();
+        }
+        window.toggleSelectAll = toggleSelectAll;
+
+        function updateSelectAllCheckbox() {
+            const selectAllCb = document.getElementById('selectAllFines');
+            if (!selectAllCb) return;
+
+            const visibleCheckboxes = document.querySelectorAll('#historyContent tbody tr:not([style*="display: none"]) .fine-checkbox');
+            const checkedCount = Array.from(visibleCheckboxes).filter(cb => cb.checked).length;
+
+            selectAllCb.checked = visibleCheckboxes.length > 0 && checkedCount === visibleCheckboxes.length;
+            selectAllCb.indeterminate = checkedCount > 0 && checkedCount < visibleCheckboxes.length;
+        }
+
+        function updateBulkActionBar() {
+            const bar = document.getElementById('bulkActionBar');
+            const countSpan = document.getElementById('selectedCount');
+            if (!bar || !countSpan) return;
+
+            const count = selectedFineIds.size;
+            countSpan.textContent = count;
+            bar.style.display = count > 0 ? 'block' : 'none';
+        }
+
+        function clearSelection() {
+            selectedFineIds.clear();
+            document.querySelectorAll('.fine-checkbox').forEach(cb => cb.checked = false);
+            const selectAllCb = document.getElementById('selectAllFines');
+            if (selectAllCb) selectAllCb.checked = false;
+            updateBulkActionBar();
+        }
+        window.clearSelection = clearSelection;
+
+        function bulkMarkPaid() {
+            if (selectedFineIds.size === 0) {
+                showToast('No fines selected', 'error');
+                return;
+            }
+            document.getElementById('bulkPaidCount').textContent = selectedFineIds.size;
+            document.getElementById('bulkPaidDateInput').value = new Date().toISOString().split('T')[0];
+            document.getElementById('bulkPaidModal').style.display = 'block';
+        }
+        window.bulkMarkPaid = bulkMarkPaid;
+
+        function closeBulkPaidModal() {
+            document.getElementById('bulkPaidModal').style.display = 'none';
+        }
+        window.closeBulkPaidModal = closeBulkPaidModal;
+
+        async function confirmBulkPaid() {
+            const paidDate = document.getElementById('bulkPaidDateInput').value;
+            if (!paidDate) {
+                alert('Please select a payment date');
+                return;
+            }
+
+            const fineIds = Array.from(selectedFineIds);
+            if (fineIds.length === 0) {
+                alert('No fines selected');
+                closeBulkPaidModal();
+                return;
+            }
+
+            try {
+                showLoading(`Marking ${fineIds.length} fines as paid...`);
+                const password = await getAdminPassword('marking fines as paid');
+
+                for (const fineId of fineIds) {
+                    await callFunction('updateFine', {
+                        fineId: fineId,
+                        updates: { paid: true, paidDate: paidDate },
+                        adminPassword: password
+                    });
+                }
+
+                closeBulkPaidModal();
+                clearSelection();
+                hideLoading();
+                showToast(`${fineIds.length} fines marked as paid`, 'success');
+
+                // Refresh history to show updated status
+                await refreshHistory();
+            } catch (error) {
+                hideLoading();
+                handlePermissionError(error, 'marking fines as paid');
+                alert('❌ Failed to update some fines');
+            }
+        }
+        window.confirmBulkPaid = confirmBulkPaid;
+
+        async function bulkMarkUnpaid() {
+            if (selectedFineIds.size === 0) {
+                showToast('No fines selected', 'error');
+                return;
+            }
+
+            if (!confirm(`Mark ${selectedFineIds.size} fines as unpaid?`)) {
+                return;
+            }
+
+            const fineIds = Array.from(selectedFineIds);
+
+            try {
+                showLoading(`Marking ${fineIds.length} fines as unpaid...`);
+                const password = await getAdminPassword('marking fines as unpaid');
+
+                for (const fineId of fineIds) {
+                    await callFunction('updateFine', {
+                        fineId: fineId,
+                        updates: { paid: false, paidDate: null },
+                        adminPassword: password
+                    });
+                }
+
+                clearSelection();
+                hideLoading();
+                showToast(`${fineIds.length} fines marked as unpaid`, 'success');
+
+                // Refresh history to show updated status
+                await refreshHistory();
+            } catch (error) {
+                hideLoading();
+                handlePermissionError(error, 'marking fines as unpaid');
+                alert('❌ Failed to update some fines');
+            }
+        }
+        window.bulkMarkUnpaid = bulkMarkUnpaid;
 
         function markAllPaid() {
             document.getElementById('markAllModal').style.display = 'block';

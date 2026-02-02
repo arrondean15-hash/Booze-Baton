@@ -222,6 +222,20 @@
                 <button class="btn btn-success" style="margin-top: 10px;" onclick="markAllPaid()">Mark All as Paid</button>
             </div>
 
+            <!-- Bulk Action Bar (hidden by default) -->
+            <div id="bulkActionBar" class="card" style="display: none; background: linear-gradient(135deg, #00843D 0%, #005a2a 100%); border: none; padding: 15px; margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="color: white; font-weight: 600;">
+                        <span id="selectedCount">0</span> fines selected
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn" style="background: white; color: #00843D;" onclick="bulkMarkPaid()">✓ Mark Paid</button>
+                        <button class="btn" style="background: #ffcc00; color: #333;" onclick="bulkMarkUnpaid()">✗ Mark Unpaid</button>
+                        <button class="btn btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white;" onclick="clearSelection()">Clear Selection</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0f2454 100%); border: none; text-align: center; padding: 20px;">
                 <div style="color: white; margin-bottom: 12px;">
                     <div style="font-size: 1.1em; font-weight: 600;">📜 Full Fine History</div>
@@ -780,6 +794,20 @@
             </div>
             <button class="btn" onclick="confirmMarkAllPaid()">Confirm</button>
             <button class="btn btn-secondary" onclick="closeMarkAllModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Bulk Paid Modal -->
+    <div id="bulkPaidModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeBulkPaidModal()">&times;</span>
+            <div class="modal-header">Mark Selected as Paid</div>
+            <div class="form-group">
+                <label>Payment date for <span id="bulkPaidCount">0</span> selected fines:</label>
+                <input type="date" id="bulkPaidDateInput">
+            </div>
+            <button class="btn" onclick="confirmBulkPaid()">Confirm</button>
+            <button class="btn btn-secondary" onclick="closeBulkPaidModal()">Cancel</button>
         </div>
     </div>
 

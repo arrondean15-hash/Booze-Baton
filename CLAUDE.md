@@ -156,6 +156,14 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **2 Feb 2026**:
+  - v2.11.0: Multi-select bulk actions for History tab
+    - Checkboxes on each fine row for individual selection
+    - "Select All" checkbox in header (selects visible/filtered fines)
+    - Bulk action bar appears when fines selected
+    - "Mark Paid" button with date picker for bulk payment
+    - "Mark Unpaid" button for bulk unpaid
+    - "Clear Selection" to deselect all
 - **1 Feb 2026**:
   - v2.10.1: Fixed Cloud Functions - converted admin functions from `onCall` to `onRequest` to work with direct HTTP fetch calls from frontend
   - v2.10.0: UI improvements and EA stats integration
