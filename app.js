@@ -177,12 +177,22 @@
             showToast('App locked. View-only mode.', 'info');
         }
 
-        // Get admin password (no prompt - must be unlocked first)
+        // Get admin password (auto-prompts if locked, stays unlocked for the session)
         async function getAdminPassword(actionDescription = 'this action') {
-            if (!isAppUnlocked || !adminPassword) {
-                showToast('⚠️ App is locked. Go to Settings to unlock for editing.', 'error');
-                throw new Error('App must be unlocked to edit. Go to Settings.');
+            if (isAppUnlocked && adminPassword) {
+                return adminPassword;
             }
+            // Auto-prompt for password
+            const password = prompt(`Enter admin password to unlock app for ${actionDescription}:`);
+            if (!password) {
+                throw new Error('Password required to proceed.');
+            }
+            adminPassword = password;
+            sessionStorage.setItem('adminPassword', password);
+            isAppUnlocked = true;
+            updateLockStatus();
+            updateAdminPanelVisibility();
+            showToast('App unlocked! You can now edit.', 'success');
             return adminPassword;
         }
 
@@ -394,11 +404,10 @@
         // Manual match result entry
         let selectedMatchResult = null;
 
-        function selectMatchResult(result) {
-            if (!isAppUnlocked || !adminPassword) {
-                showToast('Please unlock app in Settings first', 'error');
-                return;
-            }
+        async function selectMatchResult(result) {
+            try {
+                await getAdminPassword('recording match result');
+            } catch (e) { return; }
 
             selectedMatchResult = result;
 
@@ -554,10 +563,9 @@
 
         // Add historical baton entry (for backfilling)
         async function addHistoricalEntry() {
-            if (!isAppUnlocked || !adminPassword) {
-                showToast('Please unlock app in Settings first', 'error');
-                return;
-            }
+            try {
+                await getAdminPassword('adding historical entry');
+            } catch (e) { return; }
 
             const matchDate = document.getElementById('historyDate').value;
             const fromTeam = document.getElementById('historyFromTeam').value.trim();
@@ -631,10 +639,9 @@
 
         // Automated Baton Update - calls cloud function to check latest match
         async function manualUpdateBaton() {
-            if (!isAppUnlocked || !adminPassword) {
-                showToast('Please unlock app in Settings first', 'error');
-                return;
-            }
+            try {
+                await getAdminPassword('updating baton');
+            } catch (e) { return; }
 
             if (!currentBatonHolder || !currentBatonHolder.holderTeamId) {
                 showToast('No baton holder set with a team ID. Use Team ID Finder first.', 'error');
@@ -684,10 +691,9 @@
 
         // Opponent team search functions
         async function searchOpponentTeam() {
-            if (!isAppUnlocked || !adminPassword) {
-                showToast('Please unlock app in Settings first', 'error');
-                return;
-            }
+            try {
+                await getAdminPassword('searching teams');
+            } catch (e) { return; }
 
             const searchInput = document.getElementById('opponentSearchInput');
             const resultsDiv = document.getElementById('opponentSearchResults');
@@ -939,12 +945,9 @@
                 console.log('✅ Match history and player mappings loaded...');
             });
 
-            // Restore last tab
-            const lastTab = localStorage.getItem('lastTab');
-            if (lastTab && document.getElementById(lastTab)) {
-                switchTab(lastTab);
-                console.log('✅ Restored last tab:', lastTab);
-            }
+            // Always start on home page
+            switchTab('home');
+            console.log('✅ Starting on home page');
 
             // Update version display
             const versionEl = document.getElementById('appVersion');
@@ -3595,7 +3598,6 @@
         let charts = {
             playerFines: null,
             perGame: null,
-            fineTypes: null,
             payment: null,
             trends: null
         };
@@ -3869,22 +3871,22 @@
             }
 
             container.innerHTML = `
-                <table>
+                <table style="width: 100%; table-layout: fixed; font-size: 0.85em;">
                     <thead>
                         <tr>
-                            <th style="text-align: left;">Date</th>
-                            <th style="text-align: center;">Fines</th>
-                            <th style="text-align: right;">Cost</th>
-                            <th style="text-align: left;">Top Offender</th>
+                            <th style="text-align: left; width: 30%;">Date</th>
+                            <th style="text-align: center; width: 15%;">Fines</th>
+                            <th style="text-align: right; width: 20%;">Cost</th>
+                            <th style="text-align: left; width: 35%;">Top Offender</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${topDays.map(([date, stats], i) => `
                             <tr${i === 0 ? ' style="background: rgba(255,205,0,0.1);"' : ''}>
-                                <td>${i === 0 ? '🏆 ' : ''}${date}</td>
+                                <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${i === 0 ? '🏆 ' : ''}${date}</td>
                                 <td style="text-align: center; font-weight: 600; color: #FFCD00;">${stats.count}</td>
                                 <td style="text-align: right; color: #ff6b6b;">£${stats.total.toFixed(2)}</td>
-                                <td>${stats.topOffender} <span style="color: #7B9AD4;">(${stats.topOffenderCount})</span></td>
+                                <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${stats.topOffender} <span style="color: #7B9AD4;">(${stats.topOffenderCount})</span></td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -4878,10 +4880,9 @@
 
         // Save vote edit
         async function saveVoteEdit() {
-            if (!isAppUnlocked) {
-                showToast('App must be unlocked to edit votes', 'error');
-                return;
-            }
+            try {
+                await getAdminPassword('editing votes');
+            } catch (e) { return; }
 
             const date = document.getElementById('editVoteDate').value;
             const voter = document.getElementById('editVoteVoter').value;
@@ -4939,10 +4940,9 @@
 
         // Delete a vote
         async function deleteVote(date, voter) {
-            if (!isAppUnlocked) {
-                showToast('App must be unlocked to delete votes', 'error');
-                return;
-            }
+            try {
+                await getAdminPassword('deleting votes');
+            } catch (e) { return; }
 
             if (!confirm(`Delete ${voter}'s vote for ${date}?`)) {
                 return;
