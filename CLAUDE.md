@@ -183,3 +183,74 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 - **Node.js 20**: Deprecated April 2026, decommissioned October 2026 - upgrade to Node.js 22
 - **functions.config()**: Deprecated March 2026 - migrate to params package
+
+---
+
+## UI Redesign (Branch: `ui-redesign`)
+
+### Overview
+Full visual overhaul to a Leeds United-branded mobile-first design. Backend (Cloud Functions, Firestore) stays completely untouched. Only frontend files change: `styles.css`, `index.html`, and DOM references in `app.js`.
+
+### Design Reference
+Pencil mockups created in VS Code Pencil extension. Reference images saved in:
+`/Users/arrondean/Desktop/App Colours Idea/`
+
+### Design System
+
+**Colours (Official Leeds United palette):**
+- Primary background: `#1D3C8D` (Royal blue)
+- Card surfaces: `#16307A` (Darker blue)
+- Tab bar: `#152C6B` (Darkest blue)
+- Accent/CTA: `#FFCD00` (Leeds gold)
+- Borders/strokes: `#2E5AB0`
+- Primary text: `#FFFFFF`
+- Secondary text: `#A8BDE0`
+- Muted text: `#7B9AD4`
+
+**Typography:**
+- Headlines: Sora (bold)
+- Body/UI: Inter
+- Fallback: system fonts
+
+**Background:**
+- Elland Road stadium image merged behind content with semi-transparent blue overlay (`#1D3C8DA6` ~65% opacity)
+
+### Screens Designed (5 iPhone screens, 393×852px)
+1. **Home** - Greeting, Elland Road banner, stat cards (Total Pot, Unpaid, Players), Baton Holder card, Recent Fines
+2. **Leaderboard** - "Hall of Shame", segmented tabs (Worst/Improved/Clean), podium top 3, full rankings
+3. **Voting** - Daily Vote with LIVE badge, Best/Worst player radio selections, Submit button
+4. **History** - Search bar, filter chips (All/Unpaid/Paid/This Week), date-grouped fine entries with status badges
+5. **Log Fine** - Modal-style form (Player, Reason, Amount, Date, Notes), Quick Fine shortcuts
+
+### Tab Bar Pattern
+- 5 tabs: Home, Board, + (raised gold circle), Vote, History
+- The "+" opens Log Fine as a modal overlay
+- Active tab highlighted in gold
+
+### Mapping: New Screens → Existing Tabs
+| New Screen | Old Tab(s) | Notes |
+|-----------|-----------|-------|
+| Home | Stats + Baton | Combined into dashboard |
+| Leaderboard | Stats/Charts | Redesigned as "Hall of Shame" |
+| Voting | Voting | Same functionality, new look |
+| History | History | Same functionality, new look |
+| Log Fine | Add | Redesigned as modal |
+| TBD | Players, Manage, Settings, Spakka, Matches | Need to design these screens |
+
+### Progress Tracker
+- [x] Create `ui-redesign` branch
+- [x] Update CLAUDE.md with redesign context
+- [ ] Phase 1: CSS restyle (colours, typography, card styles)
+- [ ] Phase 2: HTML restructure (mobile-first layout, tab bar)
+- [ ] Phase 3: app.js DOM reference updates
+- [ ] Phase 4: Remaining screens (Players, Manage, Settings, Matches, Spakka)
+- [ ] Phase 5: Local testing with `firebase serve`
+- [ ] Phase 6: Merge to main & deploy
+
+### Important Notes
+- **DO NOT** modify `functions/index.js` - backend stays as-is
+- **DO NOT** change Firestore collection names or document structures
+- **DO NOT** deploy from this branch until fully tested
+- All existing functionality must keep working (fines, voting, baton, matches etc.)
+- Test with `firebase serve --only hosting` before any deploy
+- The current app has 11 tabs - the redesign consolidates into 5 main screens + settings/admin
