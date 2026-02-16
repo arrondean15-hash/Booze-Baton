@@ -271,7 +271,7 @@ Pencil mockups created in VS Code Pencil extension. Reference images saved in:
 - [x] History filter bug fix (off-by-one from checkbox column)
 - [x] UX fixes (homepage default, auto-unlock, table overflow, removed unused chart)
 - [x] Troubleshooting audit (JS errors, CSS issues, dead code cleanup)
-- [ ] Merge to main (currently deployed from `ui-redesign` branch)
+- [x] Merge to main (PR #14 merged)
 
 ### App Lock / Auto-Unlock System
 - `isAppUnlocked` boolean + `adminPassword` stored in `sessionStorage`
