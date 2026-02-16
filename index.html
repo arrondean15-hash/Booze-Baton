@@ -10,739 +10,938 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-    <div class="header">
-        <div class="header-content">
-            <img src="logo.png" alt="Leeds" class="header-badge">
-            <div>
-                <h1>🍺 BOOZE BATON</h1>
-                <div class="subtitle">Booze Baton Tracker</div>
-                <div style="font-size: 0.75em; color: #FFCD00; margin-top: 5px; font-style: italic;">Spartan can't make apps, Stuey rules supreme</div>
-                <div id="versionInfo" style="font-size: 0.7em; color: #999; margin-top: 8px; opacity: 0.7;">
-                    <span>v2.1.0</span> • <span id="lastUpdated">Last updated: 18 Jan 2026</span>
+    <div class="app-shell">
+        <div class="content">
+
+            <!-- ==================== HOME ==================== -->
+            <div id="home" class="tab-content active">
+                <div class="screen-header">
+                    <div>
+                        <div class="screen-subtitle">Good evening</div>
+                        <h1 class="screen-title">Booze Baton</h1>
+                    </div>
+                    <div class="screen-header-actions">
+                        <button id="headerRefreshBtn" class="icon-btn" onclick="refreshHistory()" title="Refresh Data">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>
+                        <div class="profile-circle" onclick="switchTab('settings')">
+                            <img src="logo.png" alt="Leeds" class="header-badge">
+                        </div>
+                    </div>
                 </div>
-                <button id="headerRefreshBtn" class="btn" style="margin-top: 10px; background: #FFCD00; color: #1D428A; font-weight: 600; padding: 8px 16px; font-size: 0.85em;" onclick="refreshHistory()">🔄 Refresh Data</button>
+
+                <div class="mot-badge">
+                    <div class="mot-icon"><i data-lucide="shield"></i></div>
+                    <div class="mot-text">
+                        <div class="mot-title">Marching On Together</div>
+                        <div class="mot-sub">Season 2025/26 &bull; EA Pro Clubs</div>
+                    </div>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon--gold"><i data-lucide="wallet"></i></div>
+                        <div class="stat-value" id="totalPot">£0</div>
+                        <div class="stat-label">Total Pot</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon--red"><i data-lucide="alert-triangle"></i></div>
+                        <div class="stat-value stat-value--red" id="totalUnpaid">£0</div>
+                        <div class="stat-label">Unpaid</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon--green"><i data-lucide="users"></i></div>
+                        <div class="stat-value" id="totalFines">0</div>
+                        <div class="stat-label">Fines</div>
+                    </div>
+                </div>
+
+                <div class="section-label">
+                    <span class="section-line"></span>
+                    <span>BATON HOLDER</span>
+                </div>
+
+                <div class="baton-home-card" onclick="switchTab('baton')">
+                    <div id="homeBatonDisplay" class="baton-home-placeholder">
+                        Loading baton holder...
+                    </div>
+                </div>
+
+                <div class="section-label-row">
+                    <div class="section-label">
+                        <span class="section-line"></span>
+                        <span>RECENT FINES</span>
+                    </div>
+                    <a class="see-all" onclick="switchTab('history')">See All</a>
+                </div>
+
+                <div id="recentFinesHome"></div>
+
+                <div class="quick-nav">
+                    <button class="quick-nav-btn" onclick="switchTab('players')">
+                        <i data-lucide="users"></i><span>Players</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('charts')">
+                        <i data-lucide="line-chart"></i><span>Charts</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('matches')">
+                        <i data-lucide="gamepad-2"></i><span>Matches</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('manage')">
+                        <i data-lucide="settings"></i><span>Manage</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('spakka')">
+                        <i data-lucide="eye"></i><span>Simple</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('baton')">
+                        <i data-lucide="beer"></i><span>Baton</span>
+                    </button>
+                </div>
+
+                <div id="versionInfo" style="text-align: center; padding: 20px 0 40px; font-size: 0.7em; color: #7B9AD4; opacity: 0.5;">
+                    <span>v2.12.0</span> &bull; <span id="lastUpdated">Last updated: 16 Feb 2026</span>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <div class="tabs">
-        <button class="tab active" onclick="switchTab('add')">➕ Add</button>
-        <button class="tab" onclick="switchTab('voting')">🗳️ Voting</button>
-        <button class="tab" onclick="switchTab('stats')">📊 Stats</button>
-        <button class="tab" onclick="switchTab('charts')">📈 Charts</button>
-        <button class="tab" onclick="switchTab('history')">📋 History</button>
-        <button class="tab" onclick="switchTab('players')">👥 Players</button>
-        <button class="tab" onclick="switchTab('manage')">⚙️ Manage</button>
-        <button class="tab" onclick="switchTab('baton')">🍺 Baton</button>
-        <button class="tab" onclick="switchTab('settings')">🔧 Settings</button>
-        <button class="tab" onclick="switchTab('spakka')">🎯 Spakka</button>
-        <button class="tab" onclick="switchTab('matches')">⚽ Matches</button>
-    </div>
+            <!-- ==================== BOARD (Leaderboard) ==================== -->
+            <div id="board" class="tab-content">
+                <div class="screen-header">
+                    <h1 class="screen-title">Hall of Shame</h1>
+                    <button class="icon-btn" onclick="switchTab('stats')">
+                        <i data-lucide="sliders-horizontal"></i>
+                    </button>
+                </div>
 
-    <div class="content">
-        <!-- Add Fine Tab -->
-        <div id="add" class="tab-content active">
-            <h2 class="section-title">Log a New Fine</h2>
-            <div class="card">
+                <div class="board-tabs">
+                    <button class="board-tab active" data-board="worst">Worst</button>
+                    <button class="board-tab" data-board="improved">Improved</button>
+                    <button class="board-tab" data-board="clean">Clean</button>
+                </div>
+
+                <div id="boardWorst" class="board-panel active">
+                    <div class="section-label">
+                        <span class="section-line"></span>
+                        <span>WORST OFFENDERS</span>
+                    </div>
+                    <div id="hallOfShameList"></div>
+                </div>
+
+                <div id="boardImproved" class="board-panel">
+                    <div class="section-label">
+                        <span class="section-line"></span>
+                        <span>MOST IMPROVED</span>
+                    </div>
+                    <div id="mostImprovedList"></div>
+                </div>
+
+                <div id="boardClean" class="board-panel">
+                    <div class="section-label">
+                        <span class="section-line"></span>
+                        <span>CLEAN RECORD</span>
+                    </div>
+                    <div id="cleanRecordList"></div>
+                </div>
+
+                <div class="card" style="margin-top: 16px;">
+                    <div class="stat-label">Worst Offender</div>
+                    <div class="stat-value" id="worstOffender" style="font-size: 1em;">-</div>
+                </div>
+            </div>
+
+            <!-- ==================== ADD FINE ==================== -->
+            <div id="add" class="tab-content">
+                <div class="fine-modal-bar">
+                    <button type="button" class="fine-modal-action" onclick="switchTab('home')">Cancel</button>
+                    <span class="fine-modal-title">Log Fine</span>
+                    <button type="button" class="fine-modal-action fine-modal-save" onclick="document.getElementById('fineForm').requestSubmit()">Save</button>
+                </div>
+
                 <form id="fineForm">
                     <div class="form-group">
-                        <label>Player Name(s) * <span style="font-size: 0.85em; color: #666;">(Tap to select)</span></label>
-                        <div id="playerCheckboxes" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; background: white;"></div>
+                        <label>Player</label>
+                        <div id="playerCheckboxes" class="player-chips-wrap"></div>
                     </div>
 
                     <div class="form-group">
-                        <label>Fine Reason *</label>
+                        <label>Fine Reason</label>
                         <select id="fineReason" required onchange="updateAmount()">
                             <option value="">Select fine...</option>
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label>Amount (£) *</label>
+                        <label>Amount (&pound;)</label>
                         <input type="number" id="fineAmount" step="0.01" placeholder="0.00" required>
                     </div>
 
                     <div class="form-group">
-                        <label>Date *</label>
+                        <label>Date</label>
                         <input type="date" id="fineDate" required>
                     </div>
 
-                    <button type="submit" class="btn">Add Fine</button>
+                    <button type="submit" class="btn">Log Fine</button>
                 </form>
             </div>
-        </div>
 
-        <!-- Stats Tab -->
-        <div id="stats" class="tab-content">
-            <h2 class="section-title">Club Stats</h2>
-            <div id="statsScopeIndicator" style="text-align: center; padding: 8px 12px; margin: 10px 0; background: #f8f9fa; border-radius: 6px; font-size: 0.9em; color: #666;"></div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">💰 Total Pot</div>
-                    <div class="stat-value" id="totalPot">£0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">⚠️ Unpaid</div>
-                    <div class="stat-value" id="totalUnpaid">£0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">📝 Fines</div>
-                    <div class="stat-value" id="totalFines">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">🔥 Worst</div>
-                    <div class="stat-value" id="worstOffender" style="font-size: 1em;">-</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">💬 Payment Reminders</h3>
-                <button class="btn btn-secondary" onclick="copyUnpaidList()">📋 Copy Unpaid List</button>
-                <button class="btn btn-secondary" onclick="copyPaymentReminder()">💸 Copy Payment Reminder</button>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">🏆 Leaderboards</h3>
-
-                <div style="margin-bottom: 20px;">
-                    <h4 style="color: #C8102E; margin-bottom: 10px;">😱 Hall of Shame</h4>
-                    <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">Top 5 worst offenders (lifetime total)</div>
-                    <div id="hallOfShameList" style="font-size: 0.95em;"></div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <h4 style="color: #00843D; margin-bottom: 10px;">📈 Most Improved</h4>
-                    <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">Most fines paid in last 30 days</div>
-                    <div id="mostImprovedList" style="font-size: 0.95em;"></div>
-                </div>
-
-                <div>
-                    <h4 style="color: #1D428A; margin-bottom: 10px;">✨ Clean Record</h4>
-                    <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">Zero unpaid fines (sorted by total paid)</div>
-                    <div id="cleanRecordList" style="font-size: 0.95em;"></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <label>Select Player:</label>
-                <select id="playerSelector" onchange="updatePlayerStats()">
-                    <option value="all">All Players</option>
-                </select>
-            </div>
-
-            <div id="playerStatsDetail"></div>
-        </div>
-
-        <!-- Charts Tab -->
-        <div id="charts" class="tab-content">
-            <h2 class="section-title">Analytics Dashboard</h2>
-            <div id="chartsScopeIndicator" style="text-align: center; padding: 8px 12px; margin: 10px 0; background: #f8f9fa; border-radius: 6px; font-size: 0.9em; color: #666;"></div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Distribution by Player</h3>
-                <div class="chart-container">
-                    <canvas id="playerFinesChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">Fines Per Game Analysis</h3>
-                <div class="chart-container">
-                    <canvas id="perGameChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">Top 10 Fine Types</h3>
-                <div class="chart-container">
-                    <canvas id="fineTypesChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">Payment Status Overview</h3>
-                <div class="chart-container">
-                    <canvas id="paymentChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">Fine Trends Over Time</h3>
-                <div class="chart-container">
-                    <canvas id="trendsChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">🔍 Fine-Specific Analysis</h3>
-                <div style="margin-bottom: 15px;">
-                    <label style="font-weight: 600; margin-bottom: 8px; display: block; color: #666;">Select Fine Type:</label>
-                    <select id="fineTypeAnalysisSelector" onchange="analyzeFineType()" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 1em;">
-                        <option value="">-- Choose a fine type --</option>
-                    </select>
-                </div>
-                <div id="fineTypeAnalysisContent"></div>
-            </div>
-        </div>
-
-        <!-- History Tab -->
-        <div id="history" class="tab-content">
-            <h2 class="section-title">Fine History</h2>
-            
-            <div class="card filter-section">
-                <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search..." onkeyup="applyFilters()">
-                
-                <div class="filter-grid">
-                    <select id="filterPlayer" onchange="applyFilters()">
-                        <option value="">All Players</option>
-                    </select>
-                    <select id="filterFine" onchange="applyFilters()">
-                        <option value="">All Fines</option>
-                    </select>
-                    <select id="filterPaid" onchange="applyFilters()">
-                        <option value="">All Status</option>
-                        <option value="paid">Paid Only</option>
-                        <option value="unpaid">Unpaid Only</option>
-                    </select>
-                    <input type="date" id="filterDate" onchange="applyFilters()" placeholder="Filter by date">
-                </div>
-
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #1D428A; font-size: 0.9em;">📅 Date Range Filters:</div>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button class="btn btn-secondary" style="flex: 1; min-width: 100px; font-size: 0.85em;" onclick="setDateFilter('thisMonth')">This Month</button>
-                        <button class="btn btn-secondary" style="flex: 1; min-width: 100px; font-size: 0.85em;" onclick="setDateFilter('lastMonth')">Last Month</button>
-                        <button class="btn btn-secondary" style="flex: 1; min-width: 100px; font-size: 0.85em;" onclick="setDateFilter('thisSeason')">This Season</button>
-                        <button class="btn btn-secondary" style="flex: 1; min-width: 100px; font-size: 0.85em;" onclick="setDateFilter('all')">All Time</button>
+            <!-- ==================== VOTING ==================== -->
+            <div id="voting" class="tab-content">
+                <div class="screen-header">
+                    <h1 class="screen-title">Daily Vote</h1>
+                    <div class="live-badge">
+                        <span class="live-dot"></span>
+                        <span>LIVE</span>
                     </div>
-                    <div id="dateRangeIndicator" style="margin-top: 8px; font-size: 0.85em; color: #666; font-style: italic;"></div>
                 </div>
 
-                <button class="btn btn-success" style="margin-top: 10px;" onclick="markAllPaid()">Mark All as Paid</button>
+                <!-- Last Night's Results -->
+                <div id="lastNightResults" class="card" style="background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%); border: 1px solid #2E5AB0; display: none;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center; font-size: 1.3em;">Last Night's Results</h3>
+                    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 2.5em;">&#127942;</div>
+                            <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Best Player</div>
+                            <div id="lastNightBest" style="font-size: 1.4em; font-weight: bold;">-</div>
+                            <div id="lastNightBestVotes" style="font-size: 0.85em; color: #A8BDE0;"></div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 2.5em;">&#128169;</div>
+                            <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Worst Player</div>
+                            <div id="lastNightWorst" style="font-size: 1.4em; font-weight: bold;">-</div>
+                            <div id="lastNightWorstVotes" style="font-size: 0.85em; color: #A8BDE0;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Voting Status Banner -->
+                <div id="votingStatusBanner" class="card" style="text-align: center; padding: 15px;">
+                    <div id="votingStatusText" style="font-size: 1.1em; font-weight: 600; color: #FFCD00;"></div>
+                    <div id="votingTimeRemaining" style="font-size: 0.9em; color: #A8BDE0; margin-top: 5px;"></div>
+                </div>
+
+                <!-- Vote Summary -->
+                <div id="voteSummaryCard" class="card" style="display: none; background: rgba(39,174,96,0.15); border: 1px solid rgba(39,174,96,0.3);">
+                    <h3 style="margin-bottom: 15px; color: #2ecc71; font-size: 1.2em;">Your Vote Submitted</h3>
+                    <div id="voteSummaryVoter" style="font-weight: 600; color: #FFCD00; margin-bottom: 10px;"></div>
+                    <div style="display: flex; justify-content: space-around; margin-bottom: 15px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 1.5em;">&#127942;</div>
+                            <div style="font-size: 0.85em; color: #A8BDE0;">Best</div>
+                            <div id="voteSummaryBest" style="font-weight: 600; color: #2ecc71;"></div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 1.5em;">&#128169;</div>
+                            <div style="font-size: 0.85em; color: #A8BDE0;">Worst</div>
+                            <div id="voteSummaryWorst" style="font-weight: 600; color: #e74c3c;"></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="enableVoteEdit()" style="width: 100%;">Edit My Vote</button>
+                </div>
+
+                <!-- Voting Form -->
+                <div id="votingFormContainer" class="card">
+                    <h3 id="votingFormTitle" style="margin-bottom: 15px; color: #FFCD00; font-size: 1.2em;">Cast Your Vote</h3>
+
+                    <div class="form-group">
+                        <label>Your Name *</label>
+                        <select id="votingVoterName" required onchange="checkExistingVote()">
+                            <option value="">Select your name...</option>
+                        </select>
+                    </div>
+
+                    <div id="votingChoicesContainer">
+                        <div class="form-group">
+                            <label>Best Player Tonight *</label>
+                            <select id="votingBestPlayer" required>
+                                <option value="">Select best player...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Worst Player Tonight *</label>
+                            <select id="votingWorstPlayer" required>
+                                <option value="">Select worst player...</option>
+                            </select>
+                        </div>
+
+                        <button id="submitVoteBtn" class="btn" onclick="submitVote()">Submit Vote</button>
+                        <button id="cancelEditBtn" class="btn btn-secondary" onclick="cancelVoteEdit()" style="display: none; margin-top: 10px;">Cancel</button>
+                    </div>
+                    <div id="voteValidationError" style="color: #e74c3c; text-align: center; margin-top: 10px; display: none;"></div>
+                </div>
+
+                <!-- Voting Closed -->
+                <div id="votingClosedMessage" class="card" style="display: none; text-align: center; padding: 30px;">
+                    <div style="font-size: 3em; margin-bottom: 15px;">&#127769;</div>
+                    <div style="font-size: 1.2em; font-weight: 600; color: #FFCD00; margin-bottom: 10px;">Voting is Closed</div>
+                    <div style="color: #A8BDE0;">Voting opens daily at 6:00 AM</div>
+                </div>
+
+                <!-- Today's Live Standings -->
+                <div id="todayStandingsContainer" class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.2em;">Today's Live Standings</h3>
+                    <div id="todayVoteCount" style="text-align: center; color: #A8BDE0; margin-bottom: 15px; font-size: 0.95em;"></div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <div style="text-align: center; font-weight: 600; color: #2ecc71; margin-bottom: 10px;">Best Race</div>
+                            <div id="todayBestStandings" style="background: rgba(39,174,96,0.1); border-radius: 8px; padding: 10px;"></div>
+                        </div>
+                        <div>
+                            <div style="text-align: center; font-weight: 600; color: #e74c3c; margin-bottom: 10px;">Worst Race</div>
+                            <div id="todayWorstStandings" style="background: rgba(231,76,60,0.1); border-radius: 8px; padding: 10px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All-Time Leaderboard -->
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.2em;">All-Time Leaderboard</h3>
+                    <div style="overflow-x: auto;">
+                        <table id="votingLeaderboard" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 12px; background: #152C6B; color: #FFCD00;">Player</th>
+                                    <th style="text-align: center; padding: 12px; background: #152C6B; color: #FFCD00;">Best</th>
+                                    <th style="text-align: center; padding: 12px; background: #152C6B; color: #FFCD00;">Worst</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboardBody">
+                                <tr><td colspan="3" style="text-align: center; padding: 20px; color: #A8BDE0;">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin Vote Management -->
+                <div id="voteAdminSection" class="card" style="display: none; border-left: 4px solid #e74c3c;">
+                    <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 1.2em;">Admin: Manage Votes</h3>
+                    <div class="form-group">
+                        <label>Select Date</label>
+                        <input type="date" id="adminVoteDate" onchange="loadVotesForDate()">
+                    </div>
+                    <div id="adminVotesContainer">
+                        <div style="text-align: center; color: #A8BDE0; padding: 20px;">Select a date to view votes</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Bulk Action Bar (hidden by default) -->
-            <div id="bulkActionBar" class="card" style="display: none; background: linear-gradient(135deg, #00843D 0%, #005a2a 100%); border: none; padding: 15px; margin-bottom: 15px;">
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div style="color: white; font-weight: 600;">
-                        <span id="selectedCount">0</span> fines selected
+            <!-- ==================== HISTORY ==================== -->
+            <div id="history" class="tab-content">
+                <div class="screen-header">
+                    <h1 class="screen-title">Fine History</h1>
+                </div>
+
+                <div class="card filter-section">
+                    <input type="text" id="searchBox" class="search-box" placeholder="Search fines..." onkeyup="applyFilters()">
+
+                    <div class="filter-grid">
+                        <select id="filterPlayer" onchange="applyFilters()">
+                            <option value="">All Players</option>
+                        </select>
+                        <select id="filterFine" onchange="applyFilters()">
+                            <option value="">All Fines</option>
+                        </select>
+                        <select id="filterPaid" onchange="applyFilters()">
+                            <option value="">All Status</option>
+                            <option value="paid">Paid Only</option>
+                            <option value="unpaid">Unpaid Only</option>
+                        </select>
+                        <input type="date" id="filterDate" onchange="applyFilters()">
+                    </div>
+
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2E5AB0;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #FFCD00; font-size: 0.9em;">Date Range:</div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary btn-small" onclick="setDateFilter('thisMonth')">This Month</button>
+                            <button class="btn btn-secondary btn-small" onclick="setDateFilter('lastMonth')">Last Month</button>
+                            <button class="btn btn-secondary btn-small" onclick="setDateFilter('thisSeason')">This Season</button>
+                            <button class="btn btn-secondary btn-small" onclick="setDateFilter('all')">All Time</button>
+                        </div>
+                        <div id="dateRangeIndicator" style="margin-top: 8px; font-size: 0.85em; color: #7B9AD4; font-style: italic;"></div>
+                    </div>
+
+                    <button class="btn btn-success" style="margin-top: 10px;" onclick="markAllPaid()">Mark All as Paid</button>
+                </div>
+
+                <!-- Filter Summary -->
+                <div id="filterSummary" class="card" style="display: none;">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Filter Summary</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+                        <div><strong>Total Fines:</strong> <span id="summaryTotalCount">0</span></div>
+                        <div><strong>Total Cost:</strong> <span id="summaryTotalCost">£0</span></div>
+                        <div><strong style="color: #6ECEB2;">Paid:</strong> <span id="summaryPaid" style="color: #6ECEB2;">£0</span></div>
+                        <div><strong style="color: #ff6b6b;">Unpaid:</strong> <span id="summaryUnpaid" style="color: #ff6b6b;">£0</span></div>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong style="color: #FFCD00;">Top Players:</strong>
+                        <div id="summaryTopPlayers" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;"></div>
+                    </div>
+                    <div id="summaryDailyStats"></div>
+                </div>
+
+                <!-- Bulk Action Bar -->
+                <div id="bulkActionBar" class="card" style="display: none; background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%); border: none; padding: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="color: white; font-weight: 600;">
+                            <span id="selectedCount">0</span> fines selected
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-small" style="background: white; color: #27ae60;" onclick="bulkMarkPaid()">Mark Paid</button>
+                            <button class="btn btn-small" style="background: #FFCD00; color: #333;" onclick="bulkMarkUnpaid()">Mark Unpaid</button>
+                            <button class="btn btn-small btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white;" onclick="clearSelection()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%); border: 1px solid #2E5AB0; text-align: center; padding: 20px;">
+                    <div style="color: white; margin-bottom: 12px;">
+                        <div style="font-size: 1.1em; font-weight: 600;">Full Fine History</div>
+                        <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">Click refresh to load all fines</div>
+                    </div>
+                    <button id="refreshHistoryBtn" class="btn" onclick="refreshHistory()">Refresh History</button>
+                </div>
+
+                <div id="historyContent"></div>
+            </div>
+
+            <!-- ==================== STATS (Secondary) ==================== -->
+            <div id="stats" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Player Stats</h1>
+                    <div></div>
+                </div>
+
+                <div id="statsScopeIndicator" style="text-align: center; padding: 8px 12px; margin: 10px 0; background: #16307A; border-radius: 6px; font-size: 0.9em; color: #A8BDE0;"></div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Payment Reminders</h3>
+                    <button class="btn btn-secondary" onclick="copyUnpaidList()">Copy Unpaid List</button>
+                    <button class="btn btn-secondary" onclick="copyPaymentReminder()">Copy Payment Reminder</button>
+                </div>
+
+                <div class="card">
+                    <label>Select Player:</label>
+                    <select id="playerSelector" onchange="updatePlayerStats()">
+                        <option value="all">All Players</option>
+                    </select>
+                </div>
+
+                <div id="playerStatsDetail"></div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Player vs Player</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                        <select id="comparePlayerA" onchange="updatePlayerComparison()">
+                            <option value="">Select player...</option>
+                        </select>
+                        <select id="comparePlayerB" onchange="updatePlayerComparison()">
+                            <option value="">Select player...</option>
+                        </select>
+                    </div>
+                    <div id="comparisonResult" style="display: none;">
+                        <div id="comparisonBar" style="margin-bottom: 15px;"></div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div id="playerAStats" style="text-align: center; padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                            <div id="playerBStats" style="text-align: center; padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div id="playerAFineTypes" style="padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                            <div id="playerBFineTypes" style="padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== CHARTS (Secondary) ==================== -->
+            <div id="charts" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Analytics</h1>
+                    <div></div>
+                </div>
+
+                <div id="chartsScopeIndicator" style="text-align: center; padding: 8px 12px; margin: 10px 0; background: #16307A; border-radius: 6px; font-size: 0.9em; color: #A8BDE0;"></div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Fine Distribution by Player</h3>
+                    <div class="chart-container"><canvas id="playerFinesChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Fines Per Game Analysis</h3>
+                    <div class="chart-container"><canvas id="perGameChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Payment Status Overview</h3>
+                    <div class="chart-container"><canvas id="paymentChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Fine Trends Over Time</h3>
+                    <div class="chart-container"><canvas id="trendsChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Busiest Days by Fine Count</h3>
+                    <div id="busiestByCount" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Fine-Specific Analysis</h3>
+                    <div style="margin-bottom: 15px;">
+                        <label>Select Fine Type:</label>
+                        <select id="fineTypeAnalysisSelector" onchange="analyzeFineType()">
+                            <option value="">-- Choose a fine type --</option>
+                        </select>
+                    </div>
+                    <div id="fineTypeAnalysisContent"></div>
+                </div>
+            </div>
+
+            <!-- ==================== PLAYERS (Secondary) ==================== -->
+            <div id="players" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Player Breakdown</h1>
+                    <div></div>
+                </div>
+                <div id="playersContent"></div>
+            </div>
+
+            <!-- ==================== MANAGE (Secondary) ==================== -->
+            <div id="manage" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Manage Players</h1>
+                    <div></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Add New Player</h3>
+                    <div class="form-group">
+                        <input type="text" id="newPlayerName" placeholder="Enter player name">
+                    </div>
+                    <button class="btn btn-secondary" onclick="addNewPlayer()">Add Player</button>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Update Games Played</h3>
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        Update current season games played (EAFC 26 only)
+                    </div>
+                    <div id="managePlayersTable"></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">EA Pro Clubs Stats</h3>
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        Live games played from EA servers (Benidorm United)
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn" style="background: white; color: #00843D;" onclick="bulkMarkPaid()">✓ Mark Paid</button>
-                        <button class="btn" style="background: #ffcc00; color: #333;" onclick="bulkMarkUnpaid()">✗ Mark Unpaid</button>
-                        <button class="btn btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white;" onclick="clearSelection()">Clear Selection</button>
+                        <button class="btn" onclick="fetchEAGamesPlayed()" id="fetchEABtn">Fetch from EA</button>
+                        <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn">Auto-Update EAFC 26</button>
+                    </div>
+                    <div class="info-text" style="margin-top: 10px; font-size: 0.8em;">
+                        Auto-Update syncs EA games to EAFC 26 field (excludes Void matches)
+                    </div>
+                    <div id="eaGamesPlayedList" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+
+            <!-- ==================== BATON (Secondary) ==================== -->
+            <div id="baton" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Booze Baton</h1>
+                    <div></div>
+                </div>
+
+                <!-- Current Baton Holder -->
+                <div class="card" style="background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%); border: 2px solid #FFCD00;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center;">CURRENT BATON HOLDER</h3>
+                    <div id="currentBatonHolderDisplay"></div>
+                </div>
+
+                <div class="stats-grid" style="grid-template-columns: 1fr;">
+                    <div class="stat-card">
+                        <div class="stat-label">Current Pot</div>
+                        <div class="stat-value" id="batonTotalPot">£0</div>
                     </div>
                 </div>
-            </div>
 
-            <div class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0f2454 100%); border: none; text-align: center; padding: 20px;">
-                <div style="color: white; margin-bottom: 12px;">
-                    <div style="font-size: 1.1em; font-weight: 600;">📜 Full Fine History</div>
-                    <div style="font-size: 0.85em; opacity: 0.9; margin-top: 5px;">Click refresh to load all fines from database</div>
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Current Forfeits</h3>
+                    <div id="forfeitTable"></div>
                 </div>
-                <button id="refreshHistoryBtn" class="btn" style="background: white; color: #1D428A; font-weight: 600;" onclick="refreshHistory()">🔄 Refresh History</button>
-            </div>
 
-            <div id="historyContent"></div>
-        </div>
-
-        <!-- Players Tab -->
-        <div id="players" class="tab-content">
-            <h2 class="section-title">Player Breakdown</h2>
-            <div id="playersContent"></div>
-        </div>
-
-        <!-- Manage Tab -->
-        <div id="manage" class="tab-content">
-            <h2 class="section-title">Manage Players</h2>
-            
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Add New Player</h3>
-                <div class="form-group">
-                    <input type="text" id="newPlayerName" placeholder="Enter player name">
-                </div>
-                <button class="btn btn-secondary" onclick="addNewPlayer()">Add Player</button>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Update Games Played</h3>
-                <div class="info-text" style="margin-bottom: 15px;">
-                    Update current season games played (EAFC 26 only)
-                </div>
-                <div id="managePlayersTable"></div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">📊 EA Pro Clubs Stats</h3>
-                <div class="info-text" style="margin-bottom: 15px;">
-                    Live games played from EA servers (Benidorm United)
-                </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" onclick="fetchEAGamesPlayed()" id="fetchEABtn">
-                        Fetch from EA
+                <!-- Automated Baton Update -->
+                <div class="card" style="border: 2px solid #27ae60;">
+                    <h3 style="margin-bottom: 10px; color: #27ae60;">Automated Baton Update</h3>
+                    <div class="info-text" style="margin-bottom: 15px; background: rgba(39,174,96,0.1); padding: 12px; border-radius: 8px; border-left: 4px solid #27ae60;">
+                        Automatically checks the latest match result for the current holder.<br>
+                        <strong>RULES:</strong>
+                        <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
+                            <li>Baton moves ONLY if holder LOST</li>
+                            <li>Baton stays if holder WON or DREW</li>
+                            <li>Only competitive matches (friendlies ignored)</li>
+                            <li>Prevents duplicate processing</li>
+                        </ul>
+                    </div>
+                    <button id="updateBatonBtn" class="btn btn-success" onclick="manualUpdateBaton()" style="width: 100%; padding: 15px; font-size: 1.1em;">
+                        Update Baton
                     </button>
-                    <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn">
-                        Auto-Update EAFC 26
-                    </button>
-                </div>
-                <div class="info-text" style="margin-top: 10px; font-size: 0.8em;">
-                    Auto-Update syncs EA games to EAFC 26 field (excludes Void matches)
-                </div>
-                <div id="eaGamesPlayedList" style="margin-top: 15px;"></div>
-            </div>
-        </div>
-
-        <!-- Baton Tab -->
-        <div id="baton" class="tab-content">
-            <h2 class="section-title">🍺 Booze Baton</h2>
-
-            <!-- Current Baton Holder -->
-            <div class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0a1e4d 100%); color: white; border: 3px solid #FFCD00;">
-                <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center;">🍺 CURRENT BATON HOLDER 🍺</h3>
-                <div id="currentBatonHolderDisplay"></div>
-            </div>
-
-            <div class="stats-grid" style="grid-template-columns: 1fr;">
-                <div class="stat-card">
-                    <div class="stat-label">💰 Current Pot</div>
-                    <div class="stat-value" id="batonTotalPot">£0</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Current Forfeits</h3>
-                <div id="forfeitTable"></div>
-            </div>
-
-            <!-- Automated Baton Update -->
-            <div class="card" style="border: 2px solid #00843D;">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">🔄 Automated Baton Update</h3>
-                <div class="info-text" style="margin-bottom: 15px; background: #e8f5e9; border-left-color: #00843D;">
-                    📡 Automatically checks the latest match result for the current holder.<br>
-                    <strong>RULES:</strong>
-                    <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
-                        <li>Baton moves ONLY if holder LOST</li>
-                        <li>Baton stays if holder WON or DREW</li>
-                        <li>Only competitive matches (friendlies ignored)</li>
-                        <li>Prevents duplicate processing</li>
-                    </ul>
-                </div>
-                <button id="updateBatonBtn" class="btn" onclick="manualUpdateBaton()" style="width: 100%; padding: 15px; font-size: 1.1em; background: #00843D;">
-                    🔄 Update Baton
-                </button>
-                <div style="margin-top: 10px; text-align: center; font-size: 0.85em; color: #666;">
-                    ℹ️ Requires admin access (unlock in Settings)
-                </div>
-            </div>
-
-            <!-- Backfill History Section -->
-            <div class="card" style="border: 2px dashed #1D428A;">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">📜 Add Historical Entry</h3>
-                <div class="info-text" style="margin-bottom: 15px; font-size: 0.9em;">
-                    Use this to backfill past baton transfers. This adds to history only and doesn't change the current holder.
+                    <div style="margin-top: 10px; text-align: center; font-size: 0.85em; color: #7B9AD4;">
+                        Requires admin access (unlock in Settings)
+                    </div>
                 </div>
 
-                <div style="display: grid; gap: 15px;">
-                    <div>
-                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Match Date</label>
-                        <input type="date" id="historyDate" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                <!-- Match Result Entry Form -->
+                <div class="card" style="border: 2px solid #FFCD00;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Record Match Result</h3>
+                    <div style="text-align: center; margin-bottom: 15px;">
+                        <span id="holderNameInForm" style="font-weight: 600; color: #FFCD00;">the holder</span>'s latest result:
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                        <button type="button" id="btnWin" class="btn btn-success" onclick="selectMatchResult('win')" style="flex: 1; padding: 12px;">WIN</button>
+                        <button type="button" id="btnDraw" class="btn btn-secondary" onclick="selectMatchResult('draw')" style="flex: 1; padding: 12px;">DRAW</button>
+                        <button type="button" id="btnLoss" class="btn btn-danger" onclick="selectMatchResult('loss')" style="flex: 1; padding: 12px;">LOSS</button>
                     </div>
 
-                    <div>
-                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Previous Holder (lost the baton)</label>
-                        <input type="text" id="historyFromTeam" placeholder="e.g., Leeds United" style="width: 100%; padding: 10px; box-sizing: border-box;">
-                    </div>
+                    <div id="matchDetailsSection" style="display: none;">
+                        <div style="display: grid; gap: 15px;">
+                            <div style="display: flex; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 600; color: #A8BDE0;" id="holderScoreLabel">Holder</label>
+                                    <input type="number" id="holderScore" value="0" min="0" style="text-align: center;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 600; color: #A8BDE0;">Opponent</label>
+                                    <input type="number" id="opponentScore" value="0" min="0" style="text-align: center;">
+                                </div>
+                            </div>
 
-                    <div>
-                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">New Holder (won the baton)</label>
-                        <input type="text" id="historyToTeam" placeholder="e.g., Arsenal" style="width: 100%; padding: 10px; box-sizing: border-box;">
-                    </div>
+                            <div id="opponentSection" style="display: none;">
+                                <label style="font-weight: 600; color: #A8BDE0;">Opponent Team</label>
+                                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                    <input type="text" id="opponentSearchInput" placeholder="Search opponent..." style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="searchOpponentTeam()">Search</button>
+                                </div>
+                                <div id="opponentSearchResults" style="max-height: 200px; overflow-y: auto;"></div>
+                                <div id="selectedOpponent" style="display: none; padding: 10px; background: #0a1e4d; border-radius: 8px; margin-top: 10px; align-items: center; gap: 10px;">
+                                    <img id="selectedOpponentLogo" src="" alt="" style="width: 30px; height: 30px; border-radius: 4px;">
+                                    <span id="selectedOpponentName" style="font-weight: 600;"></span>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="clearSelectedOpponent()" style="margin-left: auto;">Clear</button>
+                                </div>
+                                <input type="hidden" id="opponentName">
+                                <input type="hidden" id="opponentTeamId">
+                                <input type="hidden" id="opponentLogo">
+                            </div>
 
-                    <div style="display: flex; gap: 15px;">
-                        <div style="flex: 1;">
-                            <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Loser Score</label>
-                            <input type="number" id="historyFromScore" value="0" min="0" style="width: 100%; padding: 10px; text-align: center; box-sizing: border-box;">
-                        </div>
-                        <div style="flex: 1;">
-                            <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Winner Score</label>
-                            <input type="number" id="historyToScore" value="0" min="0" style="width: 100%; padding: 10px; text-align: center; box-sizing: border-box;">
+                            <div>
+                                <label style="font-weight: 600; color: #A8BDE0;">Competition</label>
+                                <input type="text" id="competitionName" placeholder="e.g., Premier League">
+                            </div>
+
+                            <button type="button" class="btn" onclick="submitMatchResult()" style="width: 100%; padding: 15px;">Submit Result</button>
                         </div>
                     </div>
+                </div>
 
-                    <div>
-                        <label style="font-weight: 600; color: #1D428A; display: block; margin-bottom: 8px;">Competition (optional)</label>
-                        <input type="text" id="historyCompetition" placeholder="e.g., Premier League" style="width: 100%; padding: 10px; box-sizing: border-box;">
+                <!-- Baton Risk Prediction -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Safest Players (Lowest Fine/Game)</h3>
+                    <div id="safePlayers"></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #ff6b6b;">At Risk Players (Highest Fine/Game)</h3>
+                    <div id="atRiskPlayers"></div>
+                </div>
+
+                <!-- Backfill History -->
+                <div class="card" style="border: 2px dashed #2E5AB0;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Add Historical Entry</h3>
+                    <div class="info-text" style="margin-bottom: 15px; font-size: 0.9em;">
+                        Use this to backfill past baton transfers. Adds to history only.
                     </div>
 
-                    <button type="button" class="btn" onclick="addHistoricalEntry()" style="width: 100%; padding: 15px; background: #1D428A;">
-                        📜 Add to History
+                    <div style="display: grid; gap: 15px;">
+                        <div>
+                            <label style="font-weight: 600; color: #A8BDE0;">Match Date</label>
+                            <input type="date" id="historyDate">
+                        </div>
+                        <div>
+                            <label style="font-weight: 600; color: #A8BDE0;">Previous Holder (lost the baton)</label>
+                            <input type="text" id="historyFromTeam" placeholder="e.g., Leeds United">
+                        </div>
+                        <div>
+                            <label style="font-weight: 600; color: #A8BDE0;">New Holder (won the baton)</label>
+                            <input type="text" id="historyToTeam" placeholder="e.g., Arsenal">
+                        </div>
+                        <div style="display: flex; gap: 15px;">
+                            <div style="flex: 1;">
+                                <label style="font-weight: 600; color: #A8BDE0;">Loser Score</label>
+                                <input type="number" id="historyFromScore" value="0" min="0" style="text-align: center;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-weight: 600; color: #A8BDE0;">Winner Score</label>
+                                <input type="number" id="historyToScore" value="0" min="0" style="text-align: center;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-weight: 600; color: #A8BDE0;">Competition (optional)</label>
+                            <input type="text" id="historyCompetition" placeholder="e.g., Premier League">
+                        </div>
+                        <button type="button" class="btn" onclick="addHistoricalEntry()" style="width: 100%; padding: 15px;">
+                            Add to History
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Baton History</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>From</th>
+                                    <th>Score</th>
+                                    <th>To</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="batonHistoryTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== SETTINGS (Secondary) ==================== -->
+            <div id="settings" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Settings</h1>
+                    <div></div>
+                </div>
+
+                <!-- App Lock/Unlock -->
+                <div class="card" style="background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%); border: 2px solid #2E5AB0;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">App Security</h3>
+                    <div id="lockStatusText" style="margin-bottom: 15px; font-size: 1.1em; text-align: center; padding: 10px; background: #16307A; border-radius: 8px;">
+                        <span style="color: #e74c3c; font-weight: 600;">App Locked - View Only Mode</span>
+                    </div>
+                    <button id="unlockAppBtn" class="btn" onclick="unlockApp()" style="width: 100%; font-size: 1.1em; padding: 12px;">
+                        Unlock App for Editing
                     </button>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Baton History</h3>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>From</th>
-                                <th>Score</th>
-                                <th>To</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="batonHistoryTable">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Settings Tab -->
-        <div id="settings" class="tab-content">
-            <h2 class="section-title">Settings</h2>
-
-            <!-- App Lock/Unlock -->
-            <div class="card" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border: 2px solid #1D428A;">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">🔐 App Security</h3>
-                <div id="lockStatusText" style="margin-bottom: 15px; font-size: 1.1em; text-align: center; padding: 10px; background: white; border-radius: 8px;">
-                    <span style="color: #C8102E; font-weight: 600;">🔒 App Locked - View Only Mode</span>
-                </div>
-                <button id="unlockAppBtn" class="btn btn-primary" onclick="unlockApp()" style="width: 100%; font-size: 1.1em; padding: 12px;">
-                    🔒 Unlock App for Editing
-                </button>
-                <div class="info-text" style="margin-top: 10px;">
-                    ℹ️ <strong>Locked:</strong> You can view all data but cannot edit.<br>
-                    ℹ️ <strong>Unlocked:</strong> You can add/edit/delete fines and manage data.<br>
-                    ℹ️ App will auto-lock when you close the browser.
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Data Management</h3>
-
-                <div style="margin-bottom: 15px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #666; font-size: 0.9em;">📊 Export Options:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                        <button class="btn btn-secondary" onclick="exportData()">📥 Export CSV</button>
-                        <button class="btn btn-secondary" onclick="exportPDF()">📄 Export PDF</button>
-                        <button class="btn btn-secondary" onclick="exportWhatsApp()" style="grid-column: 1 / -1;">💬 Export for WhatsApp</button>
+                    <div class="info-text" style="margin-top: 10px;">
+                        <strong>Locked:</strong> You can view all data but cannot edit.<br>
+                        <strong>Unlocked:</strong> You can add/edit/delete fines and manage data.<br>
+                        App will auto-lock when you close the browser.
                     </div>
                 </div>
 
-                <div style="margin-top: 10px; margin-bottom: 5px;">
-                    <strong style="color: #1D428A;">Import CSV Options:</strong>
-                </div>
-
-                <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event, false)" style="display: none;">
-                <label for="fileInput" class="btn btn-secondary" style="cursor: pointer; display: block; text-align: center;">
-                    📤 Import CSV (Add to Existing Data)
-                </label>
-
-                <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
-                <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
-                    🔄 Import CSV (Replace All Data)
-                </label>
-
-                <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
-                    ℹ️ "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
-                </div>
-
-                <button class="btn btn-success" onclick="markAllPaidSettings()">✅ Mark All as Paid</button>
-                <button class="btn btn-danger" onclick="clearAllFines()">🗑️ Clear All Fines</button>
-            </div>
-
-            <div id="importAlert"></div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Delete Player</h3>
-                <div class="info-text" style="margin-bottom: 10px;">
-                    ⚠️ This will permanently delete the player and ALL their fines!
-                </div>
-                <div class="form-group">
-                    <select id="deletePlayerSelect">
-                        <option value="">Select player to delete...</option>
-                    </select>
-                </div>
-                <button class="btn btn-danger" onclick="deletePlayerFromSettings()">Delete Player</button>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Historic Games Tracking</h3>
-                <div class="info-text" style="margin-bottom: 15px;">
-                    Total = (EAFC 25) - (Season 24/25) + (EAFC 26) + (Adjustment)
-                </div>
-                <div id="settingsPlayersTable"></div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">Fine Reasons</h3>
-                <div id="fineReasonsTable"></div>
-                <button class="btn btn-secondary" onclick="addNewFineReason()">Add New Fine Type</button>
-            </div>
-
-            <!-- Pro Clubs Player Name Mapping -->
-            <div class="card" style="border: 2px solid #27ae60;">
-                <h3 style="margin-bottom: 10px; color: #27ae60;">⚽ Pro Clubs Player Mapping</h3>
-                <div class="info-text" style="margin-bottom: 15px;">
-                    Map EA gamertags to your app player names for automatic fine generation.
-                </div>
-                <div id="playerMappingTable"></div>
-                <button class="btn" onclick="savePlayerMappings()" style="background: #27ae60; margin-top: 10px;">💾 Save Mappings</button>
-            </div>
-
-            <!-- Admin Team ID Finder -->
-            <div class="card" style="border: 2px solid #1D428A;">
-                <h3 style="margin-bottom: 10px; color: #1D428A;">🔐 Admin: Team ID Finder</h3>
-
-                <!-- Lock Screen -->
-                <div id="adminLockScreen">
-                    <div class="info-text" style="margin-bottom: 15px; text-align: center; padding: 20px;">
-                        🔒 This panel requires the app to be unlocked.<br><br>
-                        <span style="color: #666; font-size: 0.9em;">Use the "Unlock App" button above to access this feature.</span>
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Data Management</h3>
+                    <div style="margin-bottom: 15px;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #A8BDE0; font-size: 0.9em;">Export Options:</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="exportData()">Export CSV</button>
+                            <button class="btn btn-secondary" onclick="exportPDF()">Export PDF</button>
+                            <button class="btn btn-secondary" onclick="exportWhatsApp()" style="grid-column: 1 / -1;">Export for WhatsApp</button>
+                        </div>
                     </div>
+                    <div style="margin-top: 10px; margin-bottom: 5px;">
+                        <strong style="color: #FFCD00;">Import CSV Options:</strong>
+                    </div>
+                    <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event, false)" style="display: none;">
+                    <label for="fileInput" class="btn btn-secondary" style="cursor: pointer; display: block; text-align: center;">
+                        Import CSV (Add to Existing Data)
+                    </label>
+                    <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
+                    <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
+                        Import CSV (Replace All Data)
+                    </label>
+                    <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
+                        "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
+                    </div>
+                    <button class="btn btn-success" onclick="markAllPaidSettings()">Mark All as Paid</button>
+                    <button class="btn btn-danger" onclick="clearAllFines()">Clear All Fines</button>
                 </div>
 
-                <!-- Unlocked Admin Panel -->
-                <div id="adminUnlockedPanel" style="display: none;">
+                <div id="importAlert"></div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Delete Player</h3>
+                    <div class="info-text" style="margin-bottom: 10px;">
+                        This will permanently delete the player and ALL their fines!
+                    </div>
+                    <div class="form-group">
+                        <select id="deletePlayerSelect">
+                            <option value="">Select player to delete...</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-danger" onclick="deletePlayerFromSettings()">Delete Player</button>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Historic Games Tracking</h3>
                     <div class="info-text" style="margin-bottom: 15px;">
-                        🎯 Search for football teams and set the baton holder. Uses API-Football via secure Cloud Functions.
+                        Total = (EAFC 25) - (Season 24/25) + (EAFC 26) + (Adjustment)
                     </div>
+                    <div id="settingsPlayersTable"></div>
+                </div>
 
-                    <div class="form-group">
-                        <label>Search Football Club</label>
-                        <input type="text" id="teamSearchInput" placeholder="e.g., Leeds United, Arsenal, Real Madrid">
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Fine Reasons</h3>
+                    <div id="fineReasonsTable"></div>
+                    <button class="btn btn-secondary" onclick="addNewFineReason()">Add New Fine Type</button>
+                </div>
+
+                <!-- Pro Clubs Player Name Mapping -->
+                <div class="card" style="border: 2px solid #27ae60;">
+                    <h3 style="margin-bottom: 10px; color: #27ae60;">Pro Clubs Player Mapping</h3>
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        Map EA gamertags to your app player names for automatic fine generation.
                     </div>
-                    <button class="btn" onclick="searchTeamsAdmin()">🔍 Search Teams</button>
+                    <div id="playerMappingTable"></div>
+                    <button class="btn" onclick="savePlayerMappings()" style="background: #27ae60; margin-top: 10px;">Save Mappings</button>
+                </div>
 
-                    <div id="teamSearchResults" style="margin-top: 20px; max-height: 600px; overflow-y: auto;"></div>
+                <!-- Admin Team ID Finder -->
+                <div class="card" style="border: 2px solid #2E5AB0;">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Admin: Team ID Finder</h3>
+                    <div id="adminLockScreen">
+                        <div class="info-text" style="margin-bottom: 15px; text-align: center; padding: 20px;">
+                            This panel requires the app to be unlocked.<br><br>
+                            <span style="color: #7B9AD4; font-size: 0.9em;">Use the "Unlock App" button above to access this feature.</span>
+                        </div>
+                    </div>
+                    <div id="adminUnlockedPanel" style="display: none;">
+                        <div class="info-text" style="margin-bottom: 15px;">
+                            Search for football teams and set the baton holder. Uses API-Football via secure Cloud Functions.
+                        </div>
+                        <div class="form-group">
+                            <label>Search Football Club</label>
+                            <input type="text" id="teamSearchInput" placeholder="e.g., Leeds United, Arsenal, Real Madrid">
+                        </div>
+                        <button class="btn" onclick="searchTeamsAdmin()">Search Teams</button>
+                        <div id="teamSearchResults" style="margin-top: 20px; max-height: 600px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Records</div>
+                        <div class="stat-value" id="totalRecords">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Status</div>
+                        <div class="stat-value" id="dbStatus" style="font-size: 1em;">OK</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Records</div>
-                    <div class="stat-value" id="totalRecords">0</div>
+            <!-- ==================== SPAKKA (Secondary) ==================== -->
+            <div id="spakka" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Simple View</h1>
+                    <div></div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Status</div>
-                    <div class="stat-value" id="dbStatus" style="font-size: 1em;">✓ OK</div>
+
+                <div class="card" style="background: linear-gradient(135deg, #FFCD00 0%, #e6b800 100%); border: none;">
+                    <h3 style="margin-bottom: 15px; color: #1D3C8D; text-align: center; font-size: 1.5em;">THE POT</h3>
+                    <div style="text-align: center;">
+                        <div style="font-size: 3em; font-weight: bold; color: #1D3C8D; margin-bottom: 10px;" id="spakkaTotalPot">£0</div>
+                        <div style="font-size: 1.2em; color: #333;">Total money collected</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.3em;">Who Owes Money?</h3>
+                    <div id="spakkaUnpaidList"></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.3em;">Who Has Most Fines?</h3>
+                    <div id="spakkaTopOffenders"></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.3em;">Who Has The Baton?</h3>
+                    <div style="text-align: center;">
+                        <div style="font-size: 2em; font-weight: bold; color: #FFCD00; margin-bottom: 10px;" id="spakkaBatonHolder">-</div>
+                        <div style="font-size: 1em; color: #A8BDE0;">The current baton holder</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00; font-size: 1.3em;">Current Forfeits Holders</h3>
+                    <div id="spakkaForfeits"></div>
                 </div>
             </div>
+
+            <!-- ==================== MATCHES (Secondary) ==================== -->
+            <div id="matches" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Pro Clubs Matches</h1>
+                    <div></div>
+                </div>
+
+                <div class="card" style="text-align: center; margin-bottom: 15px;">
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn btn-success" onclick="logNewMatches()" id="logMatchesBtn">Log New Matches</button>
+                        <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn">Refresh History</button>
+                    </div>
+                    <div id="matchesLastUpdated" style="font-size: 0.85em; color: #7B9AD4; margin-top: 8px;"></div>
+                    <div style="font-size: 0.8em; color: #7B9AD4; margin-top: 4px;">Auto-logs daily at 1am &bull; Manual log checks for new matches only</div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Match History</h3>
+                    <div style="overflow-x: auto;">
+                        <table id="matchHistoryTable" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 10px; background: #152C6B; color: #FFCD00;">Date</th>
+                                    <th style="text-align: center; padding: 10px; background: #152C6B; color: #FFCD00; min-width: 120px;">ANY Player</th>
+                                    <th style="text-align: center; padding: 10px; background: #152C6B; color: #FFCD00;">Result</th>
+                                    <th style="text-align: center; padding: 10px; background: #152C6B; color: #FFCD00;">Score</th>
+                                    <th style="text-align: left; padding: 10px; background: #152C6B; color: #FFCD00;">Opponent</th>
+                                    <th style="text-align: left; padding: 10px; background: #152C6B; color: #FFCD00;">Players &amp; Ratings</th>
+                                </tr>
+                            </thead>
+                            <tbody id="matchHistoryBody">
+                                <tr><td colspan="6" style="text-align: center; padding: 20px; color: #A8BDE0;">No matches logged yet</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <!-- Spakka Tab -->
-        <div id="spakka" class="tab-content">
-            <h2 class="section-title">Simple View</h2>
-            
-            <div class="card" style="background: linear-gradient(135deg, #FFCD00 0%, #f0bd00 100%); border-left: 4px solid #1D428A;">
-                <h3 style="margin-bottom: 15px; color: #1D428A; text-align: center; font-size: 1.5em;">💰 THE POT</h3>
-                <div style="text-align: center;">
-                    <div style="font-size: 3em; font-weight: bold; color: #1D428A; margin-bottom: 10px;" id="spakkaTotalPot">£0</div>
-                    <div style="font-size: 1.2em; color: #333;">Total money collected</div>
+        <!-- ==================== BOTTOM TAB BAR ==================== -->
+        <nav class="tab-bar">
+            <button class="tab active" onclick="switchTab('home')">
+                <i data-lucide="home"></i>
+                <span>Home</span>
+            </button>
+            <button class="tab" onclick="switchTab('board')">
+                <i data-lucide="trophy"></i>
+                <span>Board</span>
+            </button>
+            <button class="tab tab-center" onclick="switchTab('add')">
+                <div class="tab-add-circle">
+                    <i data-lucide="plus"></i>
                 </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">😱 Who Owes Money?</h3>
-                <div id="spakkaUnpaidList"></div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🏆 Who Has Most Fines?</h3>
-                <div id="spakkaTopOffenders"></div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🍺 Who Has The Baton?</h3>
-                <div style="text-align: center;">
-                    <div style="font-size: 2em; font-weight: bold; color: #1D428A; margin-bottom: 10px;" id="spakkaBatonHolder">-</div>
-                    <div style="font-size: 1em; color: #666;">The current baton holder</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.3em;">🎯 Current Forfeits Holders</h3>
-                <div id="spakkaForfeits"></div>
-            </div>
-        </div>
-
-        <!-- Voting Tab -->
-        <div id="voting" class="tab-content">
-            <h2 class="section-title">Player Voting</h2>
-
-            <!-- Last Night's Results -->
-            <div id="lastNightResults" class="card" style="background: linear-gradient(135deg, #1D428A 0%, #0a1e4d 100%); color: white; display: none;">
-                <h3 style="margin-bottom: 15px; color: #FFCD00; text-align: center; font-size: 1.3em;">📊 Last Night's Results</h3>
-                <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5em;">🏆</div>
-                        <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Best Player</div>
-                        <div id="lastNightBest" style="font-size: 1.4em; font-weight: bold;">-</div>
-                        <div id="lastNightBestVotes" style="font-size: 0.85em; color: #ccc;"></div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5em;">💩</div>
-                        <div style="font-size: 0.9em; color: #FFCD00; margin-bottom: 5px;">Worst Player</div>
-                        <div id="lastNightWorst" style="font-size: 1.4em; font-weight: bold;">-</div>
-                        <div id="lastNightWorstVotes" style="font-size: 0.85em; color: #ccc;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Voting Status Banner -->
-            <div id="votingStatusBanner" class="card" style="text-align: center; padding: 15px;">
-                <div id="votingStatusText" style="font-size: 1.1em; font-weight: 600; color: #1D428A;"></div>
-                <div id="votingTimeRemaining" style="font-size: 0.9em; color: #666; margin-top: 5px;"></div>
-            </div>
-
-            <!-- Vote Summary (shown after voting) -->
-            <div id="voteSummaryCard" class="card" style="display: none; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-left: 4px solid #27ae60;">
-                <h3 style="margin-bottom: 15px; color: #155724; font-size: 1.2em;">✅ Your Vote Submitted</h3>
-                <div id="voteSummaryVoter" style="font-weight: 600; color: #1D428A; margin-bottom: 10px;"></div>
-                <div style="display: flex; justify-content: space-around; margin-bottom: 15px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 1.5em;">🏆</div>
-                        <div style="font-size: 0.85em; color: #666;">Best</div>
-                        <div id="voteSummaryBest" style="font-weight: 600; color: #27ae60;"></div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 1.5em;">💩</div>
-                        <div style="font-size: 0.85em; color: #666;">Worst</div>
-                        <div id="voteSummaryWorst" style="font-weight: 600; color: #e74c3c;"></div>
-                    </div>
-                </div>
-                <button class="btn btn-secondary" onclick="enableVoteEdit()" style="width: 100%;">✏️ Edit My Vote</button>
-            </div>
-
-            <!-- Voting Form -->
-            <div id="votingFormContainer" class="card">
-                <h3 id="votingFormTitle" style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">🗳️ Cast Your Vote</h3>
-
-                <div class="form-group">
-                    <label>Your Name *</label>
-                    <select id="votingVoterName" required onchange="checkExistingVote()">
-                        <option value="">Select your name...</option>
-                    </select>
-                </div>
-
-                <div id="votingChoicesContainer">
-                    <div class="form-group">
-                        <label>🏆 Best Player Tonight *</label>
-                        <select id="votingBestPlayer" required>
-                            <option value="">Select best player...</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>💩 Worst Player Tonight *</label>
-                        <select id="votingWorstPlayer" required>
-                            <option value="">Select worst player...</option>
-                        </select>
-                    </div>
-
-                    <button id="submitVoteBtn" class="btn" onclick="submitVote()">Submit Vote</button>
-                    <button id="cancelEditBtn" class="btn btn-secondary" onclick="cancelVoteEdit()" style="display: none; margin-top: 10px;">Cancel</button>
-                </div>
-                <div id="voteValidationError" style="color: #e74c3c; text-align: center; margin-top: 10px; display: none;"></div>
-            </div>
-
-            <!-- Voting Closed Message -->
-            <div id="votingClosedMessage" class="card" style="display: none; text-align: center; padding: 30px;">
-                <div style="font-size: 3em; margin-bottom: 15px;">🌙</div>
-                <div style="font-size: 1.2em; font-weight: 600; color: #1D428A; margin-bottom: 10px;">Voting is Closed</div>
-                <div style="color: #666;">Voting opens daily at 6:00 AM</div>
-            </div>
-
-            <!-- Today's Live Standings -->
-            <div id="todayStandingsContainer" class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">📊 Today's Live Standings</h3>
-                <div id="todayVoteCount" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 0.95em;"></div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <div style="text-align: center; font-weight: 600; color: #27ae60; margin-bottom: 10px;">🏆 Best Race</div>
-                        <div id="todayBestStandings" style="background: #f8fff8; border-radius: 8px; padding: 10px;"></div>
-                    </div>
-                    <div>
-                        <div style="text-align: center; font-weight: 600; color: #e74c3c; margin-bottom: 10px;">💩 Worst Race</div>
-                        <div id="todayWorstStandings" style="background: #fff8f8; border-radius: 8px; padding: 10px;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- All-Time Leaderboard -->
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A; font-size: 1.2em;">🏅 All-Time Leaderboard</h3>
-                <div style="overflow-x: auto;">
-                    <table id="votingLeaderboard" style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr>
-                                <th style="text-align: left; padding: 12px; background: #1D428A; color: #FFCD00;">Player</th>
-                                <th style="text-align: center; padding: 12px; background: #1D428A; color: #FFCD00;">🏆 Best</th>
-                                <th style="text-align: center; padding: 12px; background: #1D428A; color: #FFCD00;">💩 Worst</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboardBody">
-                            <tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Admin Vote Management (visible when unlocked) -->
-            <div id="voteAdminSection" class="card" style="display: none; border-left: 4px solid #e74c3c;">
-                <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 1.2em;">🔓 Admin: Manage Votes</h3>
-
-                <div class="form-group">
-                    <label>Select Date</label>
-                    <input type="date" id="adminVoteDate" onchange="loadVotesForDate()">
-                </div>
-
-                <div id="adminVotesContainer">
-                    <div style="text-align: center; color: #666; padding: 20px;">Select a date to view votes</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Matches Tab -->
-        <div id="matches" class="tab-content">
-            <h2 class="section-title">Pro Clubs Matches</h2>
-
-            <div class="card" style="text-align: center; margin-bottom: 15px;">
-                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                    <button class="btn" onclick="logNewMatches()" id="logMatchesBtn" style="background: #27ae60;">📥 Log New Matches</button>
-                    <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn">🔄 Refresh History</button>
-                </div>
-                <div id="matchesLastUpdated" style="font-size: 0.85em; color: #666; margin-top: 8px;"></div>
-                <div style="font-size: 0.8em; color: #888; margin-top: 4px;">Auto-logs daily at 1am • Manual log checks for new matches only</div>
-            </div>
-
-            <!-- Match History Table -->
-            <div class="card">
-                <h3 style="margin-bottom: 15px; color: #1D428A;">📋 Match History</h3>
-                <div style="overflow-x: auto;">
-                    <table id="matchHistoryTable" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
-                        <thead>
-                            <tr>
-                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Date</th>
-                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00; min-width: 120px;">ANY Player</th>
-                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Result</th>
-                                <th style="text-align: center; padding: 10px; background: #1D428A; color: #FFCD00;">Score</th>
-                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Opponent</th>
-                                <th style="text-align: left; padding: 10px; background: #1D428A; color: #FFCD00;">Players & Ratings</th>
-                            </tr>
-                        </thead>
-                        <tbody id="matchHistoryBody">
-                            <tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No matches logged yet</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+            </button>
+            <button class="tab" onclick="switchTab('voting')">
+                <i data-lucide="check-square"></i>
+                <span>Vote</span>
+            </button>
+            <button class="tab" onclick="switchTab('history')">
+                <i data-lucide="scroll-text"></i>
+                <span>History</span>
+            </button>
+        </nav>
     </div>
 
     <!-- Vote Edit Modal -->
@@ -754,14 +953,14 @@
             <input type="hidden" id="editVoteVoter">
             <div class="form-group">
                 <label>Voter</label>
-                <input type="text" id="editVoteVoterDisplay" disabled style="background: #f0f0f0;">
+                <input type="text" id="editVoteVoterDisplay" disabled style="background: #0a1e4d; color: #7B9AD4;">
             </div>
             <div class="form-group">
-                <label>🏆 Best Player</label>
+                <label>Best Player</label>
                 <select id="editVoteBest"></select>
             </div>
             <div class="form-group">
-                <label>💩 Worst Player</label>
+                <label>Worst Player</label>
                 <select id="editVoteWorst"></select>
             </div>
             <button class="btn" onclick="saveVoteEdit()">Save Changes</button>
@@ -769,7 +968,7 @@
         </div>
     </div>
 
-    <!-- Modal for Paid Date -->
+    <!-- Paid Date Modal -->
     <div id="paidModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closePaidModal()">&times;</span>
@@ -825,7 +1024,26 @@
         You're offline. Some features may not work.
     </div>
 
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script type="module" src="app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.lucide) lucide.createIcons();
+        });
+
+        // Board tab switching
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.board-tab');
+            if (!btn) return;
+            var board = btn.getAttribute('data-board');
+            document.querySelectorAll('.board-tab').forEach(function(t) { t.classList.remove('active'); });
+            btn.classList.add('active');
+            document.querySelectorAll('.board-panel').forEach(function(p) { p.classList.remove('active'); });
+            var panel = document.getElementById('board' + board.charAt(0).toUpperCase() + board.slice(1));
+            if (panel) panel.classList.add('active');
+        });
+    </script>
 </body>
 </html>
