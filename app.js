@@ -629,6 +629,59 @@
             }
         }
 
+        // Automated Baton Update - calls cloud function to check latest match
+        async function manualUpdateBaton() {
+            if (!isAppUnlocked || !adminPassword) {
+                showToast('Please unlock app in Settings first', 'error');
+                return;
+            }
+
+            if (!currentBatonHolder || !currentBatonHolder.holderTeamId) {
+                showToast('No baton holder set with a team ID. Use Team ID Finder first.', 'error');
+                return;
+            }
+
+            try {
+                showLoading('Checking latest match result...');
+                const password = await getAdminPassword('updating baton');
+
+                // Call the updateBaton cloud function (onCall format)
+                const response = await fetch(`${FUNCTIONS_URL}/updateBaton`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { adminPassword: password } })
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error.message || 'Update failed');
+                }
+
+                hideLoading();
+
+                const data = result.result || result;
+                if (data && data.batonMoved) {
+                    showToast(`Baton moved to ${data.newHolderTeamName || 'new holder'}!`, 'success');
+                    alert(`BATON MOVED!\n\n${data.reason || 'Baton has been transferred.'}`);
+                } else if (data && data.message) {
+                    showToast(data.message, 'info');
+                } else {
+                    showToast('Baton check complete - no change', 'info');
+                }
+
+                // Refresh displays
+                await loadBatonHolder();
+                updateBatonTracker();
+
+            } catch (error) {
+                console.error('Error updating baton:', error);
+                hideLoading();
+                handlePermissionError(error, 'updating baton');
+                showToast('Failed to update baton: ' + error.message, 'error');
+            }
+        }
+
         // Opponent team search functions
         async function searchOpponentTeam() {
             if (!isAppUnlocked || !adminPassword) {
@@ -821,6 +874,8 @@
         window.deleteFineReason = deleteFineReason;
         window.deleteBatonEntry = deleteBatonEntry;
         window.addHistoricalEntry = addHistoricalEntry;
+        window.manualUpdateBaton = manualUpdateBaton;
+        window.unlockApp = unlockApp;
         window.markAllPaid = markAllPaid;
         window.markAllPaidSettings = markAllPaidSettings;
         window.closeMarkAllModal = closeMarkAllModal;
@@ -1921,12 +1976,13 @@
 
             rows.forEach(row => {
                 const cells = row.cells;
-                const dateDDMMYYYY = cells[0].textContent.trim();
-                const player = cells[1].textContent.trim();
-                const fullReason = row.getAttribute('data-full-reason') || cells[2].textContent;
-                const amountText = cells[3].textContent.replace('£', '');
+                // Column 0 is checkbox (multi-select), data starts at column 1
+                const dateDDMMYYYY = cells[1].textContent.trim();
+                const player = cells[2].textContent.trim();
+                const fullReason = row.getAttribute('data-full-reason') || cells[3].textContent;
+                const amountText = cells[4].textContent.replace('£', '');
                 const amount = parseFloat(amountText) || 0;
-                const isPaid = cells[4].textContent.includes('✓');
+                const isPaid = cells[5].textContent.includes('✓');
                 const status = isPaid ? 'paid' : 'unpaid';
 
                 let show = true;

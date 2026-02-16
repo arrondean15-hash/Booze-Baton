@@ -90,6 +90,12 @@
                     <button class="quick-nav-btn" onclick="switchTab('manage')">
                         <i data-lucide="settings"></i><span>Manage</span>
                     </button>
+                    <button class="quick-nav-btn" onclick="switchTab('spakka')">
+                        <i data-lucide="eye"></i><span>Simple</span>
+                    </button>
+                    <button class="quick-nav-btn" onclick="switchTab('baton')">
+                        <i data-lucide="beer"></i><span>Baton</span>
+                    </button>
                 </div>
 
                 <div id="versionInfo" style="text-align: center; padding: 20px 0 40px; font-size: 0.7em; color: #7B9AD4; opacity: 0.5;">
@@ -356,6 +362,22 @@
                     <button class="btn btn-success" style="margin-top: 10px;" onclick="markAllPaid()">Mark All as Paid</button>
                 </div>
 
+                <!-- Filter Summary -->
+                <div id="filterSummary" class="card" style="display: none;">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Filter Summary</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+                        <div><strong>Total Fines:</strong> <span id="summaryTotalCount">0</span></div>
+                        <div><strong>Total Cost:</strong> <span id="summaryTotalCost">£0</span></div>
+                        <div><strong style="color: #6ECEB2;">Paid:</strong> <span id="summaryPaid" style="color: #6ECEB2;">£0</span></div>
+                        <div><strong style="color: #ff6b6b;">Unpaid:</strong> <span id="summaryUnpaid" style="color: #ff6b6b;">£0</span></div>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong style="color: #FFCD00;">Top Players:</strong>
+                        <div id="summaryTopPlayers" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;"></div>
+                    </div>
+                    <div id="summaryDailyStats"></div>
+                </div>
+
                 <!-- Bulk Action Bar -->
                 <div id="bulkActionBar" class="card" style="display: none; background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%); border: none; padding: 15px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
@@ -405,6 +427,29 @@
                 </div>
 
                 <div id="playerStatsDetail"></div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Player vs Player</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                        <select id="comparePlayerA" onchange="updatePlayerComparison()">
+                            <option value="">Select player...</option>
+                        </select>
+                        <select id="comparePlayerB" onchange="updatePlayerComparison()">
+                            <option value="">Select player...</option>
+                        </select>
+                    </div>
+                    <div id="comparisonResult" style="display: none;">
+                        <div id="comparisonBar" style="margin-bottom: 15px;"></div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div id="playerAStats" style="text-align: center; padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                            <div id="playerBStats" style="text-align: center; padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div id="playerAFineTypes" style="padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                            <div id="playerBFineTypes" style="padding: 10px; background: #0a1e4d; border-radius: 8px;"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- ==================== CHARTS (Secondary) ==================== -->
@@ -436,6 +481,10 @@
                 <div class="card">
                     <h3 style="margin-bottom: 15px; color: #FFCD00;">Fine Trends Over Time</h3>
                     <div class="chart-container"><canvas id="trendsChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Busiest Days by Fine Count</h3>
+                    <div id="busiestByCount"></div>
                 </div>
                 <div class="card">
                     <h3 style="margin-bottom: 15px; color: #FFCD00;">Fine-Specific Analysis</h3>
@@ -544,6 +593,68 @@
                     <div style="margin-top: 10px; text-align: center; font-size: 0.85em; color: #7B9AD4;">
                         Requires admin access (unlock in Settings)
                     </div>
+                </div>
+
+                <!-- Match Result Entry Form -->
+                <div class="card" style="border: 2px solid #FFCD00;">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">Record Match Result</h3>
+                    <div style="text-align: center; margin-bottom: 15px;">
+                        <span id="holderNameInForm" style="font-weight: 600; color: #FFCD00;">the holder</span>'s latest result:
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                        <button type="button" id="btnWin" class="btn btn-success" onclick="selectMatchResult('win')" style="flex: 1; padding: 12px;">WIN</button>
+                        <button type="button" id="btnDraw" class="btn btn-secondary" onclick="selectMatchResult('draw')" style="flex: 1; padding: 12px;">DRAW</button>
+                        <button type="button" id="btnLoss" class="btn btn-danger" onclick="selectMatchResult('loss')" style="flex: 1; padding: 12px;">LOSS</button>
+                    </div>
+
+                    <div id="matchDetailsSection" style="display: none;">
+                        <div style="display: grid; gap: 15px;">
+                            <div style="display: flex; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 600; color: #A8BDE0;" id="holderScoreLabel">Holder</label>
+                                    <input type="number" id="holderScore" value="0" min="0" style="text-align: center;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 600; color: #A8BDE0;">Opponent</label>
+                                    <input type="number" id="opponentScore" value="0" min="0" style="text-align: center;">
+                                </div>
+                            </div>
+
+                            <div id="opponentSection" style="display: none;">
+                                <label style="font-weight: 600; color: #A8BDE0;">Opponent Team</label>
+                                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                    <input type="text" id="opponentSearchInput" placeholder="Search opponent..." style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="searchOpponentTeam()">Search</button>
+                                </div>
+                                <div id="opponentSearchResults" style="max-height: 200px; overflow-y: auto;"></div>
+                                <div id="selectedOpponent" style="display: none; padding: 10px; background: #0a1e4d; border-radius: 8px; margin-top: 10px; align-items: center; gap: 10px;">
+                                    <img id="selectedOpponentLogo" src="" alt="" style="width: 30px; height: 30px; border-radius: 4px;">
+                                    <span id="selectedOpponentName" style="font-weight: 600;"></span>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="clearSelectedOpponent()" style="margin-left: auto;">Clear</button>
+                                </div>
+                                <input type="hidden" id="opponentName">
+                                <input type="hidden" id="opponentTeamId">
+                                <input type="hidden" id="opponentLogo">
+                            </div>
+
+                            <div>
+                                <label style="font-weight: 600; color: #A8BDE0;">Competition</label>
+                                <input type="text" id="competitionName" placeholder="e.g., Premier League">
+                            </div>
+
+                            <button type="button" class="btn" onclick="submitMatchResult()" style="width: 100%; padding: 15px;">Submit Result</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Baton Risk Prediction -->
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Safest Players (Lowest Fine/Game)</h3>
+                    <div id="safePlayers"></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #ff6b6b;">At Risk Players (Highest Fine/Game)</h3>
+                    <div id="atRiskPlayers"></div>
                 </div>
 
                 <!-- Backfill History -->
