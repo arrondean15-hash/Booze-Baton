@@ -1299,7 +1299,7 @@
 
         .network-status {
             position: fixed;
-            bottom: 0;
+            bottom: 84px;
             left: 0;
             right: 0;
             background: #e74c3c;
@@ -1308,7 +1308,6 @@
             padding: 8px;
             font-size: 0.85em;
             font-weight: 600;
-            transform: translateY(100%);
             transition: transform 0.3s;
             z-index: 1100;
             display: none;
@@ -1482,41 +1481,6 @@
            RESPONSIVE - MOBILE
            ===================================================== */
 
-        @media (max-width: 480px) {
-            .stats-row {
-                gap: 8px;
-            }
-
-            .stats-row .stat-card {
-                padding: 12px;
-            }
-
-            .stats-row .stat-value {
-                font-size: 20px;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .chart-container {
-                height: 250px;
-            }
-
-            #charts .card h3 {
-                font-size: 0.95em;
-            }
-
-            #todayStandingsContainer .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .quick-nav {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
         @media (max-width: 768px) {
             .chart-container {
                 height: 280px;
@@ -1579,6 +1543,41 @@
             #forfeitTable .player-card > div > strong {
                 text-align: right;
                 flex-shrink: 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-row {
+                gap: 8px;
+            }
+
+            .stats-row .stat-card {
+                padding: 12px;
+            }
+
+            .stats-row .stat-value {
+                font-size: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .chart-container {
+                height: 250px;
+            }
+
+            #charts .card h3 {
+                font-size: 0.95em;
+            }
+
+            #todayStandingsContainer .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-nav {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 

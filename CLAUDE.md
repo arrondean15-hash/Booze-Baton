@@ -156,6 +156,27 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **16 Feb 2026**:
+  - v2.12.0: Full UI redesign - Leeds United dark theme + mobile-first SPA
+    - Complete CSS restyle with Leeds United colour palette (#1D3C8D, #FFCD00, etc.)
+    - Elland Road stadium background with semi-transparent overlay
+    - 5-tab bottom navigation: Home, Board, + (Add Fine), Vote, History
+    - 12 screens: Home, Board, Add, Voting, History, Stats, Charts, Players, Manage, Baton, Settings, Spakka, Matches
+    - Quick-nav grid on Home screen for secondary screens
+    - Match Result Entry Form with Win/Draw/Loss buttons and opponent search
+    - Baton Risk Prediction (safe/at-risk players)
+    - Player vs Player comparison on Stats tab
+    - Filter summary on History tab
+    - Auto-prompt password unlock (no need to navigate to Settings)
+    - Busiest Days table with fixed mobile layout
+    - Removed Top 10 Fine Types chart (redundant)
+    - Fixed: History search/filter off-by-one from checkbox column
+    - Fixed: Network status banner positioning
+    - Fixed: `showNotification()` -> `showToast()` bug in match ANY player update
+    - Fixed: CSS media query ordering (768px before 480px)
+    - Fixed: Dead `batonForm` handler blocking `setupEnterKeyHandlers()`
+    - Fixed: `deletePlayer`/`deletePlayerFromSettings` missing try/catch on password prompt
+    - Removed dead code: old batonForm submit handler, unlockPassword keypress handler
 - **2 Feb 2026**:
   - v2.11.0: Multi-select bulk actions for History tab
     - Checkboxes on each fine row for individual selection
@@ -240,17 +261,28 @@ Pencil mockups created in VS Code Pencil extension. Reference images saved in:
 ### Progress Tracker
 - [x] Create `ui-redesign` branch
 - [x] Update CLAUDE.md with redesign context
-- [ ] Phase 1: CSS restyle (colours, typography, card styles)
-- [ ] Phase 2: HTML restructure (mobile-first layout, tab bar)
-- [ ] Phase 3: app.js DOM reference updates
-- [ ] Phase 4: Remaining screens (Players, Manage, Settings, Matches, Spakka)
-- [ ] Phase 5: Local testing with `firebase serve`
-- [ ] Phase 6: Merge to main & deploy
+- [x] Phase 1: CSS restyle (colours, typography, card styles)
+- [x] Phase 2: HTML restructure (mobile-first layout, tab bar)
+- [x] Phase 3: app.js DOM reference updates
+- [x] Phase 4: All screens implemented (Players, Manage, Settings, Matches, Spakka, Baton, Charts, Stats)
+- [x] Phase 5: Local testing with `firebase serve`
+- [x] Phase 6: Deployed to Firebase Hosting
+- [x] Feature parity audit (3 parallel agents - all 36+ missing IDs restored)
+- [x] History filter bug fix (off-by-one from checkbox column)
+- [x] UX fixes (homepage default, auto-unlock, table overflow, removed unused chart)
+- [x] Troubleshooting audit (JS errors, CSS issues, dead code cleanup)
+- [ ] Merge to main (currently deployed from `ui-redesign` branch)
+
+### App Lock / Auto-Unlock System
+- `isAppUnlocked` boolean + `adminPassword` stored in `sessionStorage`
+- `getAdminPassword()` auto-prompts if locked (no need for Settings navigation)
+- Once unlocked, stays unlocked for the browser session
+- All admin actions go through `getAdminPassword()` which handles the prompt flow
 
 ### Important Notes
 - **DO NOT** modify `functions/index.js` - backend stays as-is
 - **DO NOT** change Firestore collection names or document structures
-- **DO NOT** deploy from this branch until fully tested
 - All existing functionality must keep working (fines, voting, baton, matches etc.)
-- Test with `firebase serve --only hosting` before any deploy
-- The current app has 11 tabs - the redesign consolidates into 5 main screens + settings/admin
+- Test with `firebase serve --only hosting --port 5050` before any deploy (port 5000 taken by macOS ControlCenter)
+- 5 main tabs + 7 secondary screens accessible via quick-nav and navigation buttons
+- ES module (`type="module"`) - inline onclick handlers need `window.functionName` exposure

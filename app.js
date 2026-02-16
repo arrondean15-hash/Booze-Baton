@@ -14,8 +14,8 @@
         const db = getFirestore(app);
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v2.11.0';
-        const LAST_UPDATED = '2 Feb 2026';
+        const APP_VERSION = 'v2.12.0';
+        const LAST_UPDATED = '16 Feb 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -1089,66 +1089,11 @@
                 }
             });
 
-            const batonForm = document.getElementById('batonForm');
-            if (!batonForm) {
-                console.warn('⚠️ batonForm not found, skipping baton form handler');
-                return;
-            }
-            batonForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const fromTeam = document.getElementById('batonCurrentTeam').textContent;
-                const toTeam = document.getElementById('batonLostTo').value;
-                const score = document.getElementById('batonScore').value;
-                const dateVal = document.getElementById('batonDate').value;
-                const scoreParts = score.split('-');
-                const entry = {
-                    // New format fields
-                    previousHolderTeamName: fromTeam,
-                    newHolderTeamName: toTeam,
-                    homeScore: scoreParts[0] ? parseInt(scoreParts[0]) : 0,
-                    awayScore: scoreParts[1] ? parseInt(scoreParts[1]) : 0,
-                    matchDate: dateVal,
-                    // Keep old format for backward compatibility
-                    from: fromTeam,
-                    to: toTeam,
-                    score: score,
-                    date: dateVal,
-                    timestamp: new Date().toISOString()
-                };
-
-                try {
-                    showLoading('Updating baton...');
-                    const password = await getAdminPassword('updating baton');
-                    
-                    await callFunction('addBatonEntry', { entry, adminPassword: password });
-                    hideLoading();
-                    e.target.reset();
-                    setDefaultDate();
-                    showToast('Baton updated successfully!', 'success');
-                } catch (error) {
-                    handlePermissionError(error, 'updating baton');
-                    hideLoading();
-                    showToast('Failed to update baton', 'error');
-                }
-            });
-
             // Enter key support for various inputs
             setupEnterKeyHandlers();
         }
 
         function setupEnterKeyHandlers() {
-            // Unlock password - press Enter to unlock
-            const unlockInput = document.getElementById('unlockPassword');
-            if (unlockInput) {
-                unlockInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        unlockAdminPanel();
-                    }
-                });
-            }
-
             // Team search - press Enter to search
             const teamSearchInput = document.getElementById('teamSearchInput');
             if (teamSearchInput) {
@@ -1537,8 +1482,11 @@
                 return;
             }
 
+            let password;
+            try {
+                password = await getAdminPassword('deleting player');
+            } catch (e) { return; }
             showLoading('Deleting player...');
-            const password = await getAdminPassword('deleting player');
 
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
@@ -1568,8 +1516,11 @@
                 return;
             }
 
+            let password;
+            try {
+                password = await getAdminPassword('deleting player');
+            } catch (e) { return; }
             showLoading('Deleting player and fines...');
-            const password = await getAdminPassword('deleting player');
 
             allPlayers = allPlayers.filter(p => p.name !== name);
             await savePlayers();
@@ -5139,10 +5090,10 @@
                     }
                 }
 
-                showNotification(`ANY player updated to: ${anyPlayer || 'None'}`, 'success');
+                showToast(`ANY player updated to: ${anyPlayer || 'None'}`, 'success');
             } catch (error) {
                 console.error('Failed to update ANY player:', error);
-                showNotification('Failed to update ANY player: ' + error.message, 'error');
+                showToast('Failed to update ANY player: ' + error.message, 'error');
             }
         }
         window.updateMatchAnyPlayer = updateMatchAnyPlayer;
