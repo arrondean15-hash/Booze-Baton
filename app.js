@@ -129,9 +129,9 @@
 
             if (lockStatus) {
                 if (isAppUnlocked) {
-                    lockStatus.innerHTML = '<span style="color: #00843D; font-weight: 600;">✅ App Unlocked - Editing Enabled</span>';
+                    lockStatus.innerHTML = '<span style="color: #6ECEB2; font-weight: 600;">✅ App Unlocked - Editing Enabled</span>';
                 } else {
-                    lockStatus.innerHTML = '<span style="color: #C8102E; font-weight: 600;">🔒 App Locked - View Only Mode</span>';
+                    lockStatus.innerHTML = '<span style="color: #ff6b6b; font-weight: 600;">🔒 App Locked - View Only Mode</span>';
                 }
             }
 
@@ -231,13 +231,13 @@
             if (statsIndicator) {
                 const isFullHistory = cachedFullFines.length > 0;
                 statsIndicator.textContent = scopeText;
-                statsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                statsIndicator.style.color = isFullHistory ? '#6ECEB2' : '#FFA500';
                 statsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
             }
             if (chartsIndicator) {
                 const isFullHistory = cachedFullFines.length > 0;
                 chartsIndicator.textContent = scopeText;
-                chartsIndicator.style.color = isFullHistory ? '#00843D' : '#FFA500';
+                chartsIndicator.style.color = isFullHistory ? '#6ECEB2' : '#FFA500';
                 chartsIndicator.style.fontWeight = isFullHistory ? '600' : 'normal';
             }
         }
@@ -270,7 +270,7 @@
             }
 
             const resultsDiv = document.getElementById('teamSearchResults');
-            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Searching...</div>';
+            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #A8BDE0;">Searching...</div>';
 
             try {
                 const password = await getAdminPassword('searching teams');
@@ -279,7 +279,7 @@
                 teamSearchResults = result.data || [];
 
                 if (teamSearchResults.length === 0) {
-                    resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">No teams found</div>';
+                    resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #A8BDE0;">No teams found</div>';
                     return;
                 }
 
@@ -287,13 +287,13 @@
                 resultsDiv.innerHTML = teamSearchResults.map((team, index) => `
                     <div class="team-result-card">
                         <div style="display: flex; align-items: center; gap: 15px;">
-                            ${team.logo ? `<img src="${team.logo}" alt="${team.teamName}" style="width: 40px; height: 40px; border-radius: 4px;">` : '<div style="width: 40px; height: 40px; background: #e0e0e0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 20px;">⚽</div>'}
+                            ${team.logo ? `<img src="${team.logo}" alt="${team.teamName}" style="width: 40px; height: 40px; border-radius: 4px;">` : '<div style="width: 40px; height: 40px; background: #2E5AB0; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 20px;">⚽</div>'}
                             <div style="flex: 1;">
-                                <div style="font-weight: 600; font-size: 1.1em; color: #1D428A;">${team.teamName}</div>
-                                <div style="font-size: 0.9em; color: #666;">
+                                <div style="font-weight: 600; font-size: 1.1em; color: #FFCD00;">${team.teamName}</div>
+                                <div style="font-size: 0.9em; color: #A8BDE0;">
                                     ${team.country}${team.city ? ` • ${team.city}` : ''}
                                 </div>
-                                <div style="font-size: 0.85em; color: #999; margin-top: 2px;">
+                                <div style="font-size: 0.85em; color: #7B9AD4; margin-top: 2px;">
                                     Team ID: ${team.teamId}
                                 </div>
                             </div>
@@ -302,7 +302,7 @@
                             <button class="btn btn-secondary" onclick="saveToKnownTeams(${index})" style="font-size: 0.9em; padding: 8px 12px;">
                                 💾 Save Team
                             </button>
-                            <button class="btn" onclick="setAsBatonHolder(${index})" style="font-size: 0.9em; padding: 8px 12px; background: #00843D;">
+                            <button class="btn" onclick="setAsBatonHolder(${index})" style="font-size: 0.9em; padding: 8px 12px; background: #6ECEB2;">
                                 🎯 Set as Holder
                             </button>
                         </div>
@@ -313,7 +313,7 @@
 
             } catch (error) {
                 console.error('Error searching teams:', error);
-                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #C8102E;">Error searching teams: ' + error.message + '</div>';
+                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">Error searching teams: ' + error.message + '</div>';
                 showToast('Search failed: ' + error.message, 'error');
                 if (error.code === 'functions/permission-denied') {
                     handlePermissionError(error, 'searching teams');
@@ -641,37 +641,37 @@
             const searchQuery = searchInput.value.trim();
 
             if (searchQuery.length < 2) {
-                resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">Enter at least 2 characters to search</p>';
+                resultsDiv.innerHTML = '<p style="color: #A8BDE0; padding: 10px;">Enter at least 2 characters to search</p>';
                 return;
             }
 
-            resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">Searching...</p>';
+            resultsDiv.innerHTML = '<p style="color: #A8BDE0; padding: 10px;">Searching...</p>';
 
             try {
                 const result = await callFunction('searchTeams', { query: searchQuery, adminPassword });
                 const teams = result.data || [];
 
                 if (teams.length === 0) {
-                    resultsDiv.innerHTML = '<p style="color: #666; padding: 10px;">No teams found</p>';
+                    resultsDiv.innerHTML = '<p style="color: #A8BDE0; padding: 10px;">No teams found</p>';
                     return;
                 }
 
                 resultsDiv.innerHTML = teams.map(team => `
                     <div onclick="selectOpponentTeam(${JSON.stringify(team).replace(/"/g, '&quot;')})"
-                         style="display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s;"
-                         onmouseover="this.style.background='#f5f5f5'"
-                         onmouseout="this.style.background='white'">
+                         style="display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-bottom: 1px solid #2E5AB0; transition: background 0.2s;"
+                         onmouseover="this.style.background='rgba(46,90,176,0.3)'"
+                         onmouseout="this.style.background='transparent'">
                         ${team.logo ? `<img src="${team.logo}" style="width: 30px; height: 30px; border-radius: 4px;">` : ''}
                         <div>
-                            <div style="font-weight: 600;">${team.teamName}</div>
-                            <div style="font-size: 0.8em; color: #666;">${team.country}${team.city ? ` • ${team.city}` : ''}</div>
+                            <div style="font-weight: 600; color: #FFF;">${team.teamName}</div>
+                            <div style="font-size: 0.8em; color: #A8BDE0;">${team.country}${team.city ? ` • ${team.city}` : ''}</div>
                         </div>
                     </div>
                 `).join('');
 
             } catch (error) {
                 console.error('Error searching opponent teams:', error);
-                resultsDiv.innerHTML = `<p style="color: #C8102E; padding: 10px;">Error: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<p style="color: #ff6b6b; padding: 10px;">Error: ${error.message}</p>`;
             }
         }
 
@@ -736,16 +736,17 @@
 
         function updateBatonHolderDisplay() {
             const displayEl = document.getElementById('currentBatonHolderDisplay');
-            if (!displayEl) return;
+            const homeEl = document.getElementById('homeBatonDisplay');
 
             if (!currentBatonHolder) {
-                displayEl.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #666;">
+                if (displayEl) displayEl.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #7B9AD4;">
                         <div style="font-size: 2em; margin-bottom: 10px;">🍺</div>
                         <p>No baton holder set</p>
-                        <p style="font-size: 0.9em; color: #999;">Use Team ID Finder in Settings to set initial holder</p>
+                        <p style="font-size: 0.9em; color: #7B9AD4;">Use Team ID Finder in Settings to set initial holder</p>
                     </div>
                 `;
+                if (homeEl) homeEl.innerHTML = `<span style="color: #7B9AD4;">No holder set</span>`;
                 return;
             }
 
@@ -753,25 +754,39 @@
                 ? new Date(currentBatonHolder.lastUpdatedAt.toDate ? currentBatonHolder.lastUpdatedAt.toDate() : currentBatonHolder.lastUpdatedAt).toLocaleString('en-GB')
                 : 'Unknown';
 
-            displayEl.innerHTML = `
+            if (displayEl) displayEl.innerHTML = `
                 <div style="text-align: center; padding: 20px;">
                     ${currentBatonHolder.holderLogo ? `<img src="${currentBatonHolder.holderLogo}" alt="${currentBatonHolder.holderTeamName}" style="width: 80px; height: 80px; border-radius: 8px; margin-bottom: 15px;">` : ''}
-                    <div style="font-size: 2em; font-weight: bold; color: #1D428A; margin-bottom: 5px;">
+                    <div style="font-size: 2em; font-weight: bold; color: #FFCD00; margin-bottom: 5px;">
                         ${currentBatonHolder.holderTeamName}
                     </div>
-                    <div style="font-size: 1.1em; color: #666; margin-bottom: 10px;">
+                    <div style="font-size: 1.1em; color: #A8BDE0; margin-bottom: 10px;">
                         ${currentBatonHolder.holderCountry}${currentBatonHolder.holderCity ? ` • ${currentBatonHolder.holderCity}` : ''}
                     </div>
-                    <div style="font-size: 0.85em; color: #999; margin-top: 10px;">
+                    <div style="font-size: 0.85em; color: #7B9AD4; margin-top: 10px;">
                         Last updated: ${lastUpdated}
                     </div>
                     ${currentBatonHolder.lastProcessedMatchId ? `
-                        <div style="font-size: 0.8em; color: #999; margin-top: 5px;">
+                        <div style="font-size: 0.8em; color: #7B9AD4; margin-top: 5px;">
                             Last match ID: ${currentBatonHolder.lastProcessedMatchId}
                         </div>
                     ` : ''}
                 </div>
             `;
+
+            // Update home screen baton preview
+            if (homeEl) {
+                homeEl.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        ${currentBatonHolder.holderLogo ? `<img src="${currentBatonHolder.holderLogo}" alt="" style="width: 40px; height: 40px; border-radius: 8px;">` : '<div style="font-size: 1.5em;">🍺</div>'}
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; color: #FFCD00; font-size: 1.05em;">${currentBatonHolder.holderTeamName}</div>
+                            <div style="font-size: 0.8em; color: #A8BDE0;">${currentBatonHolder.holderCountry || ''}</div>
+                        </div>
+                        <div style="color: #7B9AD4; font-size: 0.75em;">Tap for details &rsaquo;</div>
+                    </div>
+                `;
+            }
         }
 
         window.switchTab = switchTab;
@@ -1293,7 +1308,7 @@
             const playerCheckboxes = document.getElementById('playerCheckboxes');
             if (playerCheckboxes) {
                 if (allPlayers.length === 0) {
-                    playerCheckboxes.innerHTML = '<div style="color: #999; padding: 10px; font-size: 0.9em;">No players yet. Add players in the Manage tab.</div>';
+                    playerCheckboxes.innerHTML = '<div style="color: #7B9AD4; padding: 10px; font-size: 0.9em;">No players yet. Add players in the Manage tab.</div>';
                 } else {
                     playerCheckboxes.innerHTML = allPlayers.map(player => `
                         <div class="player-chip" onclick="togglePlayerChip(this)" data-player="${player.name}">
@@ -1565,8 +1580,39 @@
             updateCharts();
             updateSpakkaTab();
             updateVotingUI();
+            updateRecentFinesHome();
+            updateGreeting();
             const fines = getFinesForAnalytics();
             document.getElementById('totalRecords').textContent = fines.length;
+        }
+
+        function updateGreeting() {
+            const el = document.querySelector('.screen-subtitle');
+            if (!el) return;
+            const h = new Date().getHours();
+            el.textContent = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+        }
+
+        function updateRecentFinesHome() {
+            const container = document.getElementById('recentFinesHome');
+            if (!container) return;
+            const fines = allFines.slice(0, 5);
+            if (fines.length === 0) {
+                container.innerHTML = '<div style="color: #7B9AD4; padding: 12px; font-size: 0.9em;">No fines yet</div>';
+                return;
+            }
+            container.innerHTML = fines.map(f => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #2E5AB0;">
+                    <div>
+                        <div style="font-weight: 600; color: #FFF; font-size: 0.95em;">${f.playerName}</div>
+                        <div style="font-size: 0.8em; color: #A8BDE0;">${f.reason ? f.reason.substring(0, 35) + (f.reason.length > 35 ? '...' : '') : ''}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 700; color: #FFCD00;">£${(f.amount || 0).toFixed(2)}</div>
+                        <div style="font-size: 0.75em; color: #7B9AD4;">${f.date ? formatDateDDMMYYYY(f.date) : ''}</div>
+                    </div>
+                </div>
+            `).join('');
         }
 
         function updateStats() {
@@ -1645,7 +1691,7 @@
 
             detailDiv.innerHTML = `
                 <div class="card">
-                    <h3 style="margin-bottom: 15px; color: #1D428A;">${selectedPlayer}</h3>
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">${selectedPlayer}</h3>
                     <div class="stats-grid">
                         <div class="stat-card">
                             <div class="stat-label">🎮 Games Played</div>
@@ -1718,7 +1764,7 @@
             document.getElementById('comparisonBar').innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-weight: 600; color: #C8102E; min-width: 60px; text-align: right;">${playerA}</span>
-                    <div style="flex: 1; display: flex; height: 30px; border-radius: 15px; overflow: hidden; background: #eee;">
+                    <div style="flex: 1; display: flex; height: 30px; border-radius: 15px; overflow: hidden; background: #0a1e4d;">
                         <div style="width: ${percentA}%; background: linear-gradient(90deg, #C8102E, #ff6b6b); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85em;">
                             ${percentA}%
                         </div>
@@ -1726,46 +1772,46 @@
                             ${percentB}%
                         </div>
                     </div>
-                    <span style="font-weight: 600; color: #1D428A; min-width: 60px;">${playerB}</span>
+                    <span style="font-weight: 600; color: #A8BDE0; min-width: 60px;">${playerB}</span>
                 </div>
             `;
 
             // Player A stats
             document.getElementById('playerAStats').innerHTML = `
                 <div style="font-weight: bold; color: #C8102E; margin-bottom: 10px; font-size: 1.1em;">${playerA}</div>
-                <div style="font-size: 1.8em; font-weight: bold; color: #333;">£${statsA.total}</div>
-                <div style="color: #666; font-size: 0.85em; margin-top: 5px;">${statsA.count} fines</div>
-                <div style="color: #999; font-size: 0.8em; margin-top: 3px;">Avg: £${statsA.avg}</div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #FFF;">£${statsA.total}</div>
+                <div style="color: #A8BDE0; font-size: 0.85em; margin-top: 5px;">${statsA.count} fines</div>
+                <div style="color: #7B9AD4; font-size: 0.8em; margin-top: 3px;">Avg: £${statsA.avg}</div>
             `;
 
             // Player B stats
             document.getElementById('playerBStats').innerHTML = `
-                <div style="font-weight: bold; color: #1D428A; margin-bottom: 10px; font-size: 1.1em;">${playerB}</div>
-                <div style="font-size: 1.8em; font-weight: bold; color: #333;">£${statsB.total}</div>
-                <div style="color: #666; font-size: 0.85em; margin-top: 5px;">${statsB.count} fines</div>
-                <div style="color: #999; font-size: 0.8em; margin-top: 3px;">Avg: £${statsB.avg}</div>
+                <div style="font-weight: bold; color: #A8BDE0; margin-bottom: 10px; font-size: 1.1em;">${playerB}</div>
+                <div style="font-size: 1.8em; font-weight: bold; color: #FFF;">£${statsB.total}</div>
+                <div style="color: #A8BDE0; font-size: 0.85em; margin-top: 5px;">${statsB.count} fines</div>
+                <div style="color: #7B9AD4; font-size: 0.8em; margin-top: 3px;">Avg: £${statsB.avg}</div>
             `;
 
             // Fine types breakdown for Player A
             document.getElementById('playerAFineTypes').innerHTML = `
                 <div style="font-weight: 600; color: #C8102E; margin-bottom: 8px; font-size: 0.9em;">${playerA}</div>
                 ${statsA.topFineTypes.map((ft, i) => `
-                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #eee;">
-                        <span style="color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
-                        <span style="font-weight: 600; color: #333;">${ft.count}x</span>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #2E5AB0;">
+                        <span style="color: #A8BDE0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
+                        <span style="font-weight: 600; color: #FFF;">${ft.count}x</span>
                     </div>
-                `).join('') || '<div style="color: #999; font-size: 0.8em;">No fines</div>'}
+                `).join('') || '<div style="color: #7B9AD4; font-size: 0.8em;">No fines</div>'}
             `;
 
             // Fine types breakdown for Player B
             document.getElementById('playerBFineTypes').innerHTML = `
-                <div style="font-weight: 600; color: #1D428A; margin-bottom: 8px; font-size: 0.9em;">${playerB}</div>
+                <div style="font-weight: 600; color: #A8BDE0; margin-bottom: 8px; font-size: 0.9em;">${playerB}</div>
                 ${statsB.topFineTypes.map((ft, i) => `
-                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #eee;">
-                        <span style="color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
-                        <span style="font-weight: 600; color: #333;">${ft.count}x</span>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8em; border-bottom: 1px solid #2E5AB0;">
+                        <span style="color: #A8BDE0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;" title="${ft.reason}">${ft.reason}</span>
+                        <span style="font-weight: 600; color: #FFF;">${ft.count}x</span>
                     </div>
-                `).join('') || '<div style="color: #999; font-size: 0.8em;">No fines</div>'}
+                `).join('') || '<div style="color: #7B9AD4; font-size: 0.8em;">No fines</div>'}
             `;
         }
 
@@ -1997,7 +2043,7 @@
 
             const topPlayersDiv = document.getElementById('summaryTopPlayers');
             topPlayersDiv.innerHTML = topPlayers.map(([name, stats], index) => {
-                const colors = ['#C8102E', '#1D428A', '#00843D', '#FFCD00', '#666'];
+                const colors = ['#ff6b6b', '#FFCD00', '#6ECEB2', '#A8BDE0', '#7B9AD4'];
                 return `<span style="background: ${colors[index]}; color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.85em;">
                     ${name}: £${stats.total.toFixed(2)} (${stats.count})
                 </span>`;
@@ -2028,7 +2074,7 @@
                 ${dailyEntries.length <= 10 ? `
                     <div style="margin-top: 10px; font-size: 0.85em;">
                         ${dailyEntries.map(([date, stats]) =>
-                            `<div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee;">
+                            `<div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #2E5AB0;">
                                 <span>${date}</span>
                                 <span>${stats.count} fines = <strong>£${stats.total.toFixed(2)}</strong></span>
                             </div>`
@@ -2107,7 +2153,7 @@
                     <div class="empty-state">
                         <div class="empty-state-icon">📝</div>
                         <p>History not loaded yet</p>
-                        <p style="font-size: 0.9em; color: #666; margin-top: 10px;">Click "Refresh History" button above to load all fines</p>
+                        <p style="font-size: 0.9em; color: #A8BDE0; margin-top: 10px;">Click "Refresh History" button above to load all fines</p>
                     </div>`;
                 return;
             }
@@ -2216,7 +2262,7 @@
                                 <span class="player-stat-value">£${finesPerGame}</span>
                             </div>
                         </div>
-                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2E5AB0;">
                             <div style="font-size: 0.85em; color: #777; margin-bottom: 5px;">Top Fines:</div>
                             ${topReasons.map(([reason, count]) => `
                                 <div style="font-size: 0.85em; margin-bottom: 3px;">
@@ -2374,13 +2420,13 @@
                 const sortedUnpaid = Object.entries(unpaidByPlayer).sort((a, b) => b[1] - a[1]);
 
                 if (sortedUnpaid.length === 0) {
-                    unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #27ae60;">🎉 Everyone has paid!</div>';
+                    unpaidList.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 1.2em; color: #6ECEB2;">🎉 Everyone has paid!</div>';
                 } else {
                     unpaidList.innerHTML = sortedUnpaid.map(([name, amount]) => `
-                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
+                        <div style="background: rgba(255,107,107,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #ff6b6b;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 1.2em; font-weight: 600; color: #333;">${name}</span>
-                                <span style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">£${amount.toFixed(0)}</span>
+                                <span style="font-size: 1.2em; font-weight: 600; color: #FFF;">${name}</span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #ff6b6b;">£${amount.toFixed(0)}</span>
                             </div>
                         </div>
                     `).join('');
@@ -2398,17 +2444,17 @@
                 const sortedOffenders = Object.entries(totalsByPlayer).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
                 if (sortedOffenders.length === 0) {
-                    topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No fines yet</div>';
+                    topOffenders.innerHTML = '<div style="text-align: center; padding: 20px; color: #7B9AD4;">No fines yet</div>';
                 } else {
                     const medals = ['🥇', '🥈', '🥉'];
                     topOffenders.innerHTML = sortedOffenders.map(([name, amount], index) => `
-                        <div style="background: ${index === 0 ? '#fff3cd' : '#f9f9f9'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#e0e0e0'};">
+                        <div style="background: ${index === 0 ? 'rgba(255,205,0,0.1)' : 'rgba(22,48,122,0.5)'}; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid ${index === 0 ? '#FFCD00' : '#2E5AB0'};">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 1.2em;">
+                                <span style="font-size: 1.2em; color: #FFF;">
                                     <span style="font-size: 1.5em; margin-right: 8px;">${medals[index]}</span>
                                     <strong>${name}</strong>
                                 </span>
-                                <span style="font-size: 1.5em; font-weight: bold; color: #1D428A;">£${amount.toFixed(0)}</span>
+                                <span style="font-size: 1.5em; font-weight: bold; color: #FFCD00;">£${amount.toFixed(0)}</span>
                             </div>
                         </div>
                     `).join('');
@@ -2469,20 +2515,20 @@
             const forfeitsDiv = document.getElementById('spakkaForfeits');
             if (forfeitsDiv) {
                 if (Object.keys(playerStats).length === 0) {
-                    forfeitsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No player data yet</div>';
+                    forfeitsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #7B9AD4;">No player data yet</div>';
                 } else {
                     forfeitsDiv.innerHTML = `
-                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #27ae60;">
-                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Least Games</div>
-                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
+                        <div style="background: rgba(110,206,178,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #6ECEB2;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #A8BDE0;">Least Games</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #FFF;">${leastGames?.name || '-'} (${leastGames?.games || 0} games)</div>
                         </div>
-                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
-                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Most Fines Total</div>
-                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
+                        <div style="background: rgba(255,205,0,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFCD00;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #A8BDE0;">Most Fines Total</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #FFF;">${highestTotal?.name || '-'} (£${(highestTotal?.total || 0).toFixed(0)})</div>
                         </div>
-                        <div style="background: #ffe5e5; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #e74c3c;">
-                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #666;">Worst Per Game</div>
-                            <div style="font-size: 1.3em; font-weight: bold; color: #1D428A;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
+                        <div style="background: rgba(255,107,107,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #ff6b6b;">
+                            <div style="font-size: 1.1em; margin-bottom: 5px; color: #A8BDE0;">Worst Per Game</div>
+                            <div style="font-size: 1.3em; font-weight: bold; color: #FFF;">${highestPerGame?.name || '-'} (£${(highestPerGame?.perGame || 0).toFixed(2)})</div>
                         </div>
                     `;
                 }
@@ -2861,13 +2907,13 @@
             const hallOfShameEl = document.getElementById('hallOfShameList');
             if (hallOfShameEl) {
                 if (hallOfShame.length === 0) {
-                    hallOfShameEl.innerHTML = '<div style="color: #999; padding: 10px;">No fines recorded yet</div>';
+                    hallOfShameEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No fines recorded yet</div>';
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     hallOfShameEl.innerHTML = hallOfShame.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
-                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
-                            <span style="font-weight: bold; color: #C8102E;">£${total.toFixed(2)}</span>
+                        `<div style="padding: 10px 0; border-bottom: 1px solid #2E5AB0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px; color: #FFF;">${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #FFCD00;">£${total.toFixed(2)}</span>
                         </div>`
                     ).join('');
                 }
@@ -2892,13 +2938,13 @@
             const mostImprovedEl = document.getElementById('mostImprovedList');
             if (mostImprovedEl) {
                 if (mostImproved.length === 0) {
-                    mostImprovedEl.innerHTML = '<div style="color: #999; padding: 10px;">No payments in last 30 days</div>';
+                    mostImprovedEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No payments in last 30 days</div>';
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     mostImprovedEl.innerHTML = mostImproved.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
-                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
-                            <span style="font-weight: bold; color: #00843D;">£${total.toFixed(2)} paid</span>
+                        `<div style="padding: 10px 0; border-bottom: 1px solid #2E5AB0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px; color: #FFF;">${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #6ECEB2;">£${total.toFixed(2)} paid</span>
                         </div>`
                     ).join('');
                 }
@@ -2923,13 +2969,13 @@
             const cleanRecordEl = document.getElementById('cleanRecordList');
             if (cleanRecordEl) {
                 if (cleanRecord.length === 0) {
-                    cleanRecordEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with clean record yet</div>';
+                    cleanRecordEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No players with clean record yet</div>';
                 } else {
                     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
                     cleanRecordEl.innerHTML = cleanRecord.map(([name, total], index) =>
-                        `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; flex-wrap: wrap;">
-                            <span style="flex: 1; min-width: 100px;">${medals[index]} ${name}</span>
-                            <span style="font-weight: bold; color: #1D428A;">£${total.toFixed(2)} paid</span>
+                        `<div style="padding: 10px 0; border-bottom: 1px solid #2E5AB0; display: flex; justify-content: space-between; flex-wrap: wrap;">
+                            <span style="flex: 1; min-width: 100px; color: #FFF;">${medals[index]} ${name}</span>
+                            <span style="font-weight: bold; color: #A8BDE0;">£${total.toFixed(2)} paid</span>
                         </div>`
                     ).join('');
                 }
@@ -2940,8 +2986,8 @@
             if (allPlayers.length === 0) {
                 const safeEl = document.getElementById('safePlayers');
                 const riskEl = document.getElementById('atRiskPlayers');
-                if (safeEl) safeEl.innerHTML = '<div style="color: #999; padding: 10px;">No player data yet</div>';
-                if (riskEl) riskEl.innerHTML = '<div style="color: #999; padding: 10px;">No player data yet</div>';
+                if (safeEl) safeEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No player data yet</div>';
+                if (riskEl) riskEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No player data yet</div>';
                 return;
             }
 
@@ -2970,20 +3016,20 @@
             const safePlayersEl = document.getElementById('safePlayers');
             if (safePlayersEl) {
                 if (safePlayers.length === 0) {
-                    safePlayersEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with games played yet</div>';
+                    safePlayersEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No players with games played yet</div>';
                 } else {
                     safePlayersEl.innerHTML = safePlayers.map((player, index) => {
                         const icons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        return `<div style="padding: 8px; border-bottom: 1px solid #2E5AB0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                             <div style="flex: 1; min-width: 150px;">
-                                <span>${icons[index]} ${player.name}</span>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
+                                <span style="color: #FFF;">${icons[index]} ${player.name}</span>
+                                <div style="font-size: 0.85em; color: #A8BDE0; margin-top: 2px;">
                                     ${player.totalGames} games • ${player.fineCount} fines
                                 </div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="font-weight: bold; color: #00843D;">£${player.finesPerGame.toFixed(2)}/game</div>
-                                <div style="font-size: 0.85em; color: #666;">£${player.totalFines.toFixed(2)} total</div>
+                                <div style="font-weight: bold; color: #6ECEB2;">£${player.finesPerGame.toFixed(2)}/game</div>
+                                <div style="font-size: 0.85em; color: #A8BDE0;">£${player.totalFines.toFixed(2)} total</div>
                             </div>
                         </div>`;
                     }).join('');
@@ -2995,20 +3041,20 @@
             const atRiskPlayersEl = document.getElementById('atRiskPlayers');
             if (atRiskPlayersEl) {
                 if (atRiskPlayers.length === 0) {
-                    atRiskPlayersEl.innerHTML = '<div style="color: #999; padding: 10px;">No players with games played yet</div>';
+                    atRiskPlayersEl.innerHTML = '<div style="color: #7B9AD4; padding: 10px;">No players with games played yet</div>';
                 } else {
                     atRiskPlayersEl.innerHTML = atRiskPlayers.map((player, index) => {
                         const icons = ['⚠️', '🔴', '🚨', '💀', '☠️'];
-                        return `<div style="padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        return `<div style="padding: 8px; border-bottom: 1px solid #2E5AB0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                             <div style="flex: 1; min-width: 150px;">
-                                <span>${icons[index]} ${player.name}</span>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">
+                                <span style="color: #FFF;">${icons[index]} ${player.name}</span>
+                                <div style="font-size: 0.85em; color: #A8BDE0; margin-top: 2px;">
                                     ${player.totalGames} games • ${player.fineCount} fines
                                 </div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="font-weight: bold; color: #C8102E;">£${player.finesPerGame.toFixed(2)}/game</div>
-                                <div style="font-size: 0.85em; color: #666;">£${player.totalFines.toFixed(2)} total</div>
+                                <div style="font-weight: bold; color: #ff6b6b;">£${player.finesPerGame.toFixed(2)}/game</div>
+                                <div style="font-size: 0.85em; color: #A8BDE0;">£${player.totalFines.toFixed(2)} total</div>
                             </div>
                         </div>`;
                     }).join('');
@@ -3532,9 +3578,9 @@
                     datasets: [{
                         label: 'Total Fines (£)',
                         data: sortedPlayers.map(([, total]) => total),
-                        backgroundColor: '#1D428A',
+                        backgroundColor: '#FFCD00',
                         borderColor: '#FFCD00',
-                        borderWidth: 2
+                        borderWidth: 1
                     }]
                 },
                 options: {
@@ -3545,7 +3591,7 @@
                         title: {
                             display: true,
                             text: 'Top 10 Players by Total Fines',
-                            color: '#1D428A',
+                            color: '#FFCD00',
                             font: { size: 14, weight: 'bold' }
                         }
                     },
@@ -3556,13 +3602,17 @@
                                 callback: function(value) {
                                     return '£' + value;
                                 },
-                                font: { size: 11 }
-                            }
+                                font: { size: 11 },
+                                color: '#A8BDE0'
+                            },
+                            grid: { color: 'rgba(46,90,176,0.3)' }
                         },
                         x: {
                             ticks: {
-                                font: { size: 11 }
-                            }
+                                font: { size: 11 },
+                                color: '#A8BDE0'
+                            },
+                            grid: { color: 'rgba(46,90,176,0.3)' }
                         }
                     }
                 }
@@ -3622,8 +3672,8 @@
                             {
                                 label: 'Games Played',
                                 data: perGameData.map(p => p.games || 0),
-                                backgroundColor: '#1D428A',
-                                borderColor: '#1D428A',
+                                backgroundColor: '#2E5AB0',
+                                borderColor: '#FFCD00',
                                 borderWidth: 1,
                                 yAxisID: 'y',
                                 order: 2
@@ -3632,11 +3682,11 @@
                                 label: 'Cost Per Game (£)',
                                 data: perGameData.map(p => p.perGame || 0),
                                 type: 'line',
-                                borderColor: '#C8102E',
-                                backgroundColor: '#C8102E',
+                                borderColor: '#ff6b6b',
+                                backgroundColor: '#ff6b6b',
                                 borderWidth: 3,
-                                pointBackgroundColor: '#C8102E',
-                                pointBorderColor: '#fff',
+                                pointBackgroundColor: '#ff6b6b',
+                                pointBorderColor: '#16307A',
                                 pointBorderWidth: 2,
                                 pointRadius: 5,
                                 tension: 0.3,
@@ -3660,7 +3710,7 @@
                             title: {
                                 display: true,
                                 text: 'Games Played vs Cost Per Game',
-                                color: '#1D428A',
+                                color: '#FFCD00',
                                 font: { size: 14, weight: 'bold' }
                             }
                         },
@@ -3672,16 +3722,17 @@
                                 title: {
                                     display: true,
                                     text: 'Games Played',
-                                    color: '#1D428A',
+                                    color: '#A8BDE0',
                                     font: { size: 11, weight: 'bold' }
                                 },
                                 ticks: {
                                     stepSize: 1,
                                     font: { size: 11 },
-                                    color: '#1D428A'
+                                    color: '#A8BDE0'
                                 },
                                 grid: {
-                                    drawOnChartArea: true
+                                    drawOnChartArea: true,
+                                    color: 'rgba(46,90,176,0.3)'
                                 }
                             },
                             y1: {
@@ -3691,7 +3742,7 @@
                                 title: {
                                     display: true,
                                     text: 'Cost Per Game (£)',
-                                    color: '#C8102E',
+                                    color: '#ff6b6b',
                                     font: { size: 11, weight: 'bold' }
                                 },
                                 ticks: {
@@ -3699,7 +3750,7 @@
                                         return '£' + (value || 0).toFixed(2);
                                     },
                                     font: { size: 11 },
-                                    color: '#C8102E'
+                                    color: '#ff6b6b'
                                 },
                                 grid: {
                                     drawOnChartArea: false
@@ -3707,8 +3758,10 @@
                             },
                             x: {
                                 ticks: {
-                                    font: { size: 11 }
-                                }
+                                    font: { size: 11 },
+                                    color: '#A8BDE0'
+                                },
+                                grid: { color: 'rgba(46,90,176,0.3)' }
                             }
                         }
                     }
@@ -3755,7 +3808,7 @@
                 .slice(0, 10);
 
             if (topDays.length === 0) {
-                container.innerHTML = '<p style="color: #666; text-align: center;">No data</p>';
+                container.innerHTML = '<p style="color: #7B9AD4; text-align: center;">No data</p>';
                 return;
             }
 
@@ -3771,11 +3824,11 @@
                     </thead>
                     <tbody>
                         ${topDays.map(([date, stats], i) => `
-                            <tr${i === 0 ? ' style="background: linear-gradient(90deg, #fff3cd, #fff8e6);"' : ''}>
+                            <tr${i === 0 ? ' style="background: rgba(255,205,0,0.1);"' : ''}>
                                 <td>${i === 0 ? '🏆 ' : ''}${date}</td>
-                                <td style="text-align: center; font-weight: 600; color: #1D428A;">${stats.count}</td>
-                                <td style="text-align: right; color: #C8102E;">£${stats.total.toFixed(2)}</td>
-                                <td>${stats.topOffender} <span style="color: #666;">(${stats.topOffenderCount})</span></td>
+                                <td style="text-align: center; font-weight: 600; color: #FFCD00;">${stats.count}</td>
+                                <td style="text-align: right; color: #ff6b6b;">£${stats.total.toFixed(2)}</td>
+                                <td>${stats.topOffender} <span style="color: #7B9AD4;">(${stats.topOffenderCount})</span></td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -3797,9 +3850,9 @@
                     labels: ['Paid', 'Unpaid'],
                     datasets: [{
                         data: [paid, unpaid],
-                        backgroundColor: ['#6ECEB2', '#C8102E'],
+                        backgroundColor: ['#6ECEB2', '#ff6b6b'],
                         borderWidth: 3,
-                        borderColor: '#ffffff'
+                        borderColor: '#16307A'
                     }]
                 },
                 options: {
@@ -3815,7 +3868,7 @@
                         title: {
                             display: true,
                             text: `Total: £${(paid + unpaid).toFixed(0)} | Paid: £${paid.toFixed(0)} | Unpaid: £${unpaid.toFixed(0)}`,
-                            color: '#1D428A',
+                            color: '#FFCD00',
                             font: { size: 14, weight: 'bold' }
                         }
                     }
@@ -3851,13 +3904,13 @@
                     datasets: [{
                         label: 'Monthly Fines (£)',
                         data: sortedMonths.map(([, total]) => total),
-                        backgroundColor: 'rgba(29, 66, 138, 0.2)',
-                        borderColor: '#1D428A',
+                        backgroundColor: 'rgba(255, 205, 0, 0.15)',
+                        borderColor: '#FFCD00',
                         borderWidth: 3,
                         fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#FFCD00',
-                        pointBorderColor: '#1D428A',
+                        pointBorderColor: '#16307A',
                         pointBorderWidth: 2,
                         pointRadius: 5,
                         pointHoverRadius: 7
@@ -3871,7 +3924,7 @@
                         title: {
                             display: true,
                             text: 'Fine Trends Over Last 12 Months',
-                            color: '#1D428A',
+                            color: '#FFCD00',
                             font: { size: 14, weight: 'bold' }
                         }
                     },
@@ -3881,8 +3934,14 @@
                             ticks: {
                                 callback: function(value) {
                                     return '£' + value;
-                                }
-                            }
+                                },
+                                color: '#A8BDE0'
+                            },
+                            grid: { color: 'rgba(46,90,176,0.3)' }
+                        },
+                        x: {
+                            ticks: { color: '#A8BDE0' },
+                            grid: { color: 'rgba(46,90,176,0.3)' }
                         }
                     }
                 }
@@ -3931,7 +3990,7 @@
 
             if (!selectedFineType) {
                 content.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #999;">
+                    <div style="text-align: center; padding: 40px; color: #7B9AD4;">
                         <div style="font-size: 3em; margin-bottom: 10px;">🔍</div>
                         <p>Select a fine type to see detailed breakdown</p>
                     </div>`;
@@ -3944,7 +4003,7 @@
 
             if (finesOfType.length === 0) {
                 content.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #999;">
+                    <div style="text-align: center; padding: 40px; color: #7B9AD4;">
                         <p>No fines found for this type</p>
                     </div>`;
                 return;
@@ -4013,7 +4072,7 @@
                     </div>
                 </div>
 
-                <h4 style="margin-bottom: 10px; color: #1D428A;">Breakdown by Player:</h4>
+                <h4 style="margin-bottom: 10px; color: #FFCD00;">Breakdown by Player:</h4>
                 <div class="table-container">
                     <table>
                         <thead>
@@ -4039,14 +4098,14 @@
                                         <td style="font-weight: 600;">${playerName}</td>
                                         <td style="text-align: center; font-weight: 600;">${stats.count}</td>
                                         <td style="text-align: right;">£${stats.totalAmount.toFixed(2)}</td>
-                                        <td style="text-align: center; color: #00843D;">
+                                        <td style="text-align: center; color: #6ECEB2;">
                                             ${stats.paidCount} (£${stats.paidAmount.toFixed(2)})
                                         </td>
-                                        <td style="text-align: center; color: #C8102E;">
+                                        <td style="text-align: center; color: #ff6b6b;">
                                             ${stats.unpaidCount} (£${stats.unpaidAmount.toFixed(2)})
                                         </td>
                                         <td style="text-align: center;">
-                                            <span style="display: inline-block; background: ${paymentPercentage == 100 ? '#00843D' : paymentPercentage >= 50 ? '#FFA500' : '#C8102E'}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: 600;">
+                                            <span style="display: inline-block; background: ${paymentPercentage == 100 ? '#6ECEB2' : paymentPercentage >= 50 ? '#FFA500' : '#ff6b6b'}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: 600;">
                                                 ${paymentPercentage}%
                                             </span>
                                         </td>
@@ -4279,20 +4338,20 @@
                 .sort((a, b) => b[1].best - a[1].best);
 
             if (sortedPlayers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">No votes yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #A8BDE0;">No votes yet</td></tr>';
                 return;
             }
 
             tbody.innerHTML = sortedPlayers.map(([name, stats], index) => {
-                const bestHighlight = index === 0 && stats.best > 0 ? 'background: #d4edda;' : '';
+                const bestHighlight = index === 0 && stats.best > 0 ? 'background: rgba(110,206,178,0.15);' : '';
                 const worstLeader = sortedPlayers.slice().sort((a, b) => b[1].worst - a[1].worst)[0];
-                const worstHighlight = name === worstLeader[0] && stats.worst > 0 ? 'background: #f8d7da;' : '';
+                const worstHighlight = name === worstLeader[0] && stats.worst > 0 ? 'background: rgba(255,107,107,0.15);' : '';
 
                 return `
                     <tr>
                         <td style="padding: 12px; font-weight: 600; ${bestHighlight}">${name}</td>
-                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #27ae60; ${bestHighlight}">${stats.best}</td>
-                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #e74c3c; ${worstHighlight}">${stats.worst}</td>
+                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #6ECEB2; ${bestHighlight}">${stats.best}</td>
+                        <td style="text-align: center; padding: 12px; font-weight: 600; color: #ff6b6b; ${worstHighlight}">${stats.worst}</td>
                     </tr>
                 `;
             }).join('');
@@ -4374,10 +4433,10 @@
             const sortedWorst = Object.entries(worstCounts).sort((a, b) => b[1] - a[1]);
 
             if (sortedBest.length === 0) {
-                bestStandings.innerHTML = '<div style="text-align: center; color: #999; padding: 10px;">No votes yet</div>';
+                bestStandings.innerHTML = '<div style="text-align: center; color: #7B9AD4; padding: 10px;">No votes yet</div>';
             } else {
                 bestStandings.innerHTML = sortedBest.map(([name, count], i) => `
-                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: #c3e6cb; border-radius: 4px;' : ''}">
+                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: rgba(110,206,178,0.2); border-radius: 4px;' : ''}">
                         <span>${name}</span>
                         <span>${count}</span>
                     </div>
@@ -4385,10 +4444,10 @@
             }
 
             if (sortedWorst.length === 0) {
-                worstStandings.innerHTML = '<div style="text-align: center; color: #999; padding: 10px;">No votes yet</div>';
+                worstStandings.innerHTML = '<div style="text-align: center; color: #7B9AD4; padding: 10px;">No votes yet</div>';
             } else {
                 worstStandings.innerHTML = sortedWorst.map(([name, count], i) => `
-                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: #f5c6cb; border-radius: 4px;' : ''}">
+                    <div style="display: flex; justify-content: space-between; padding: 6px 8px; ${i === 0 ? 'font-weight: 600; background: rgba(255,107,107,0.2); border-radius: 4px;' : ''}">
                         <span>${name}</span>
                         <span>${count}</span>
                     </div>
@@ -4659,18 +4718,18 @@
 
             const selectedDate = dateInput.value;
             if (!selectedDate) {
-                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Select a date to view votes</div>';
+                container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 20px;">Select a date to view votes</div>';
                 return;
             }
 
             try {
-                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Loading...</div>';
+                container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 20px;">Loading...</div>';
 
                 const votesSnapshot = await getDocs(collection(db, 'dailyVotes'));
                 const dateDoc = votesSnapshot.docs.find(d => d.id === selectedDate);
 
                 if (!dateDoc || !dateDoc.data().votes || Object.keys(dateDoc.data().votes).length === 0) {
-                    container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No votes for this date</div>';
+                    container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 20px;">No votes for this date</div>';
                     return;
                 }
 
@@ -4678,23 +4737,23 @@
                 const voteEntries = Object.entries(votes);
 
                 container.innerHTML = `
-                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">${voteEntries.length} vote(s) found</div>
+                    <div style="margin-bottom: 10px; color: #A8BDE0; font-size: 0.9em;">${voteEntries.length} vote(s) found</div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
                         <thead>
                             <tr>
-                                <th style="text-align: left; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Voter</th>
-                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Best</th>
-                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Worst</th>
-                                <th style="text-align: center; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd;">Actions</th>
+                                <th style="text-align: left; padding: 10px; background: #152C6B; border-bottom: 2px solid #2E5AB0;">Voter</th>
+                                <th style="text-align: center; padding: 10px; background: #152C6B; border-bottom: 2px solid #2E5AB0;">Best</th>
+                                <th style="text-align: center; padding: 10px; background: #152C6B; border-bottom: 2px solid #2E5AB0;">Worst</th>
+                                <th style="text-align: center; padding: 10px; background: #152C6B; border-bottom: 2px solid #2E5AB0;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${voteEntries.map(([voter, vote]) => `
                                 <tr>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: 600;">${voter}</td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #27ae60;">${vote.best}</td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; color: #e74c3c;">${vote.worst}</td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">
+                                    <td style="padding: 10px; border-bottom: 1px solid #2E5AB0; font-weight: 600;">${voter}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #2E5AB0; text-align: center; color: #6ECEB2;">${vote.best}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #2E5AB0; text-align: center; color: #ff6b6b;">${vote.worst}</td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #2E5AB0; text-align: center;">
                                         <button class="btn btn-small" onclick="openVoteEditModal('${selectedDate}', '${voter}')" style="padding: 5px 10px; margin-right: 5px;">✏️</button>
                                         <button class="btn btn-small btn-danger" onclick="deleteVote('${selectedDate}', '${voter}')" style="padding: 5px 10px;">🗑️</button>
                                     </td>
@@ -4706,7 +4765,7 @@
 
             } catch (error) {
                 console.error('Error loading votes for date:', error);
-                container.innerHTML = '<div style="text-align: center; color: #e74c3c; padding: 20px;">Error loading votes</div>';
+                container.innerHTML = '<div style="text-align: center; color: #ff6b6b; padding: 20px;">Error loading votes</div>';
             }
         }
 
@@ -4946,7 +5005,7 @@
             const tbody = document.getElementById('matchHistoryBody');
 
             if (!loggedMatchesCache || !loggedMatchesCache.matches || loggedMatchesCache.matches.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No matches logged yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #A8BDE0;">No matches logged yet</td></tr>';
                 return;
             }
 
@@ -4983,8 +5042,8 @@
                 }
 
                 tableHtml += `
-                    <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 8px; white-space: nowrap;">${matchDate}<br><span style="font-size: 0.8em; color: #666;">${matchTime}</span></td>
+                    <tr style="border-bottom: 1px solid #2E5AB0;">
+                        <td style="padding: 8px; white-space: nowrap;">${matchDate}<br><span style="font-size: 0.8em; color: #A8BDE0;">${matchTime}</span></td>
                         <td style="padding: 8px; text-align: center;">
                             <select onchange="updateMatchAnyPlayer('${match.matchId}', this.value)" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.9em; min-width: 110px; cursor: pointer;">
                                 ${anyPlayerOptions.join('')}
@@ -5044,7 +5103,7 @@
             try {
                 btn.disabled = true;
                 btn.textContent = 'Fetching...';
-                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Loading from EA servers...</div>';
+                container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 20px;">Loading from EA servers...</div>';
 
                 const response = await fetch(`${FUNCTIONS_URL}/getProClubsSquad`);
                 const result = await response.json();
@@ -5057,7 +5116,7 @@
                 const data = result.data || result;
 
                 if (!data.members || data.members.length === 0) {
-                    container.innerHTML = '<div style="color: #666; padding: 10px;">No squad members found</div>';
+                    container.innerHTML = '<div style="color: #A8BDE0; padding: 10px;">No squad members found</div>';
                     return;
                 }
 
@@ -5067,7 +5126,7 @@
                     .sort((a, b) => b.gamesPlayed - a.gamesPlayed);
 
                 if (mappedMembers.length === 0) {
-                    container.innerHTML = '<div style="color: #666; padding: 10px;">No mapped players found. Set up player mappings in Settings first.</div>';
+                    container.innerHTML = '<div style="color: #A8BDE0; padding: 10px;">No mapped players found. Set up player mappings in Settings first.</div>';
                     return;
                 }
 
@@ -5096,11 +5155,11 @@
                     const voidCount = voidCountByEaName[member.name] || 0;
                     const adjusted = member.gamesPlayed - voidCount;
 
-                    html += `<tr style="border-bottom: 1px solid #eee;">
+                    html += `<tr style="border-bottom: 1px solid #2E5AB0;">
                         <td style="padding: 8px; font-weight: bold;">${playerName}</td>
                         <td style="padding: 8px; text-align: center;">${member.gamesPlayed}</td>
                         <td style="padding: 8px; text-align: center; color: ${voidCount > 0 ? '#e74c3c' : '#999'};">${voidCount}</td>
-                        <td style="padding: 8px; text-align: center; font-weight: bold; color: #27ae60;">${adjusted}</td>
+                        <td style="padding: 8px; text-align: center; font-weight: bold; color: #6ECEB2;">${adjusted}</td>
                     </tr>`;
                 }
 
@@ -5112,7 +5171,7 @@
 
             } catch (error) {
                 console.error('Failed to fetch EA stats:', error);
-                container.innerHTML = `<div style="color: #e74c3c; padding: 10px;">Failed to load: ${error.message}</div>`;
+                container.innerHTML = `<div style="color: #ff6b6b; padding: 10px;">Failed to load: ${error.message}</div>`;
                 showToast('Failed to fetch EA stats: ' + error.message, 'error');
             } finally {
                 btn.disabled = false;
@@ -5235,18 +5294,18 @@
             const eaPlayers = getUniqueEaPlayers();
 
             if (eaPlayers.length === 0) {
-                container.innerHTML = '<div style="color: #666; padding: 10px;">No EA players found. Log some matches first.</div>';
+                container.innerHTML = '<div style="color: #A8BDE0; padding: 10px;">No EA players found. Log some matches first.</div>';
                 return;
             }
 
             let html = '<table style="width: 100%; border-collapse: collapse;">';
-            html += '<thead><tr><th style="text-align: left; padding: 8px; background: #f5f5f5;">EA Gamertag</th><th style="text-align: left; padding: 8px; background: #f5f5f5;">App Player Name</th></tr></thead>';
+            html += '<thead><tr><th style="text-align: left; padding: 8px; background: #152C6B;">EA Gamertag</th><th style="text-align: left; padding: 8px; background: #152C6B;">App Player Name</th></tr></thead>';
             html += '<tbody>';
 
             for (const eaName of eaPlayers) {
                 const currentMapping = playerMappings[eaName] || '';
                 html += `
-                    <tr style="border-bottom: 1px solid #eee;">
+                    <tr style="border-bottom: 1px solid #2E5AB0;">
                         <td style="padding: 8px; font-weight: 500;">${eaName}</td>
                         <td style="padding: 8px;">
                             <select id="mapping_${eaName.replace(/[^a-zA-Z0-9]/g, '_')}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd;">
