@@ -42,9 +42,9 @@ Fetches match data from EA's Pro Clubs API for club ID `21853` (Benidorm United)
 
 ## Cloud Functions
 
-Located in `functions/index.js`. All admin functions require password validation.
+Located in `functions/index.js`. All functions require Firebase Auth token verification (Bearer token in Authorization header).
 
-**Admin Functions** (onRequest with CORS):
+**Authenticated Functions** (onRequest with CORS + token auth):
 - `addFine` - Add a new fine
 - `deleteFine` - Delete a fine
 - `updateFine` - Update fine (e.g., mark as paid)
@@ -56,19 +56,24 @@ Located in `functions/index.js`. All admin functions require password validation
 - `updatePlayers` - Update players list
 - `updateFineReasons` - Update fine reasons list
 - `searchTeams` - Search football teams via API-Football
-
-**Public Functions** (onRequest):
 - `getProClubsMatches` - Get EA Pro Clubs match history
 - `getProClubsSquad` - Get EA Pro Clubs squad stats
 - `getProClubsInfo` - Get EA Pro Clubs club info
 - `getLoggedMatches` - Get logged matches from Firestore
 - `updateMatchAnyPlayer` - Update ANY player for a match
 - `logProClubsMatches` - Manual match logging trigger
-- `relogAllMatches` - Clear and re-log all matches
-
-**Callable Functions** (onCall - used internally):
 - `getLatestCompetitiveMatch` - Get recent match for a team
 - `updateBaton` - Check and update baton based on match results
+- `claimPlayerName` - Claim a player name (with transaction for uniqueness)
+- `updatePlayerMappings` - Save EA-to-app player mappings
+- `checkSuperAdmin` - Check if current user is super admin
+
+**Super Admin Functions** (requires super admin email):
+- `relogAllMatches` - Clear and re-log all matches
+- `reassignPlayerName` - Reassign a player name to a different user
+- `removeUserClaim` - Remove a user's player name claim
+- `listAllUsers` - List all registered users
+- `resetAllClaims` - Reset all player name claims
 
 **Scheduled**:
 - `scheduledMatchLog` - Runs daily at 1am UK time
@@ -82,7 +87,7 @@ Located in `functions/index.js`. All admin functions require password validation
 ### Environment Variables (set via Firebase config)
 ```bash
 firebase functions:config:set football.apikey="YOUR_KEY"
-firebase functions:config:set admin.pin="YOUR_PIN"
+firebase functions:config:set superadmin.email="YOUR_EMAIL@gmail.com"
 ```
 
 ## Deployment Workflow
@@ -123,11 +128,25 @@ firebase functions:config:set admin.pin="YOUR_PIN"
 - **Minor** (v2.9.0 → v2.10.0): New features, significant changes
 - **Major** (v2.9.0 → v3.0.0): Breaking changes, major overhauls
 
+## Authentication
+
+- **Google Sign-In** via Firebase Auth (popup with redirect fallback for iOS PWA)
+- All users must authenticate before accessing the app
+- First-time users pick a player name from the available list (enforced via `claimPlayerName` Cloud Function with Firestore transaction)
+- Voter identity is locked to authenticated user's `currentPlayerName` — no dropdown
+- Super admin (email-based) has override panel for managing user claims
+- Auth state managed via `onAuthStateChanged` listener; `init()` called after auth
+
+### Firestore Collections
+- `users/{uid}` — user profile (email, displayName, playerName, photoURL)
+- `playerNames/{name}` — uniqueness enforcement (uid, claimedAt)
+
 ## Firestore Security
 
-- Public read access on all collections
-- Client writes blocked except for `dailyVotes` and `config` collections
-- Admin operations require password via Cloud Functions
+- Authenticated read access on all collections (`request.auth != null`)
+- Client writes blocked except for `dailyVotes` (auth read/write) and `users/{userId}` (own-doc write)
+- `config`, `playerNames`, and all other collections: writes only via Cloud Functions (Admin SDK)
+- Admin operations require Firebase Auth token via Cloud Functions
 
 ## Performance Optimizations
 
@@ -156,6 +175,22 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **21 Feb 2026**:
+  - v3.0.0: Google Sign-In & User Authentication
+    - Added Firebase Auth with Google Sign-In (popup + redirect fallback)
+    - Login gate with CSS-first approach (no DOM flash)
+    - Player name claiming system with Firestore transaction for uniqueness
+    - Replaced admin PIN system with Firebase Auth token verification
+    - All Cloud Functions now use `verifyAuth()` with Bearer tokens
+    - Voting locked to authenticated user's player name (no voter dropdown)
+    - Votes now include `uid` field for identity verification
+    - Super admin panel (email-based) for user management
+    - CORS restricted to production domains + localhost
+    - Firestore rules updated: auth-required reads, restricted writes
+    - Security headers added (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
+    - Player mappings now saved via Cloud Function instead of direct Firestore write
+    - All GET fetch calls now include auth headers
+    - New Cloud Functions: claimPlayerName, updatePlayerMappings, checkSuperAdmin, reassignPlayerName, removeUserClaim, listAllUsers, resetAllClaims
 - **16 Feb 2026**:
   - v2.12.0: Full UI redesign - Leeds United dark theme + mobile-first SPA
     - Complete CSS restyle with Leeds United colour palette (#1D3C8D, #FFCD00, etc.)
@@ -273,16 +308,11 @@ Pencil mockups created in VS Code Pencil extension. Reference images saved in:
 - [x] Troubleshooting audit (JS errors, CSS issues, dead code cleanup)
 - [ ] Merge to main (currently deployed from `ui-redesign` branch)
 
-### App Lock / Auto-Unlock System
-- `isAppUnlocked` boolean + `adminPassword` stored in `sessionStorage`
-- `getAdminPassword()` auto-prompts if locked (no need for Settings navigation)
-- Once unlocked, stays unlocked for the browser session
-- All admin actions go through `getAdminPassword()` which handles the prompt flow
-
 ### Important Notes
-- **DO NOT** modify `functions/index.js` - backend stays as-is
-- **DO NOT** change Firestore collection names or document structures
-- All existing functionality must keep working (fines, voting, baton, matches etc.)
+- All users authenticate via Google Sign-In before accessing any app functionality
+- All Cloud Functions require Firebase Auth token (no more PIN)
+- Super admin email set via `firebase functions:config:set superadmin.email="..."`
 - Test with `firebase serve --only hosting --port 5050` before any deploy (port 5000 taken by macOS ControlCenter)
+- Deploy all services together (`firebase deploy`) — auth code and Firestore rules must deploy simultaneously
 - 5 main tabs + 7 secondary screens accessible via quick-nav and navigation buttons
 - ES module (`type="module"`) - inline onclick handlers need `window.functionName` exposure

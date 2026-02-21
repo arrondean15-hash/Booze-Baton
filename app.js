@@ -1,5 +1,6 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, getDoc, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, limit, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyBixQ-BIuklK7p9Im-jnRzokXgoIJ7petI",
@@ -12,20 +13,64 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const auth = getAuth(app);
+        const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v2.12.0';
-        const LAST_UPDATED = '16 Feb 2026';
+        const APP_VERSION = 'v3.0.0';
+        const LAST_UPDATED = '21 Feb 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
 
-        // Helper to call HTTP Cloud Functions
-        async function callFunction(functionName, data) {
+        // Helper to call HTTP Cloud Functions (with Firebase Auth token)
+        async function callFunction(functionName, data = {}) {
+            if (!currentUser) throw new Error('Not authenticated');
+
+            const idToken = await currentUser.getIdToken();
+
             const response = await fetch(`${FUNCTIONS_URL}/${functionName}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
                 body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (result.error) {
+                const error = new Error(result.error.message);
+                error.code = result.error.code;
+                throw error;
+            }
+
+            return result;
+        }
+
+        // Helper to make authenticated GET requests
+        async function callFunctionGet(functionName, queryParams = null) {
+            if (!currentUser) throw new Error('Not authenticated');
+
+            const idToken = await currentUser.getIdToken();
+
+            let queryString = '';
+            if (queryParams && typeof queryParams === 'object') {
+                queryString = new URLSearchParams(queryParams).toString();
+            } else if (queryParams) {
+                queryString = queryParams;
+            }
+
+            const url = queryString
+                ? `${FUNCTIONS_URL}/${functionName}?${queryString}`
+                : `${FUNCTIONS_URL}/${functionName}`;
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${idToken}`
+                }
             });
 
             const result = await response.json();
@@ -105,114 +150,392 @@
         const VOTING_CLOSE_HOUR = 23;
         const VOTING_CLOSE_MINUTE = 59;
 
-        // ADMIN PASSWORD MANAGEMENT
-        // Single unlock in Settings - then all edits work until locked/session ends
-        let adminPassword = sessionStorage.getItem('adminPassword') || null;
-        let isAppUnlocked = !!adminPassword; // Track if app is unlocked
+        // USER AUTHENTICATION STATE
+        let currentUser = null;
+        let currentPlayerName = null;
+        let isSuperAdmin = false;
 
-        // Update lock/unlock UI status
-        function updateLockStatus() {
-            const lockBtn = document.getElementById('unlockAppBtn');
-            const lockStatus = document.getElementById('lockStatusText');
+        // Handle redirect result on page load (for signInWithRedirect flow)
+        getRedirectResult(auth).catch(() => {});
 
-            if (lockBtn) {
-                if (isAppUnlocked) {
-                    lockBtn.textContent = '🔓 Lock App';
-                    lockBtn.className = 'btn btn-danger';
-                    lockBtn.onclick = lockApp;
+        // Auth state listener
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists() && userDoc.data().playerName) {
+                        currentPlayerName = userDoc.data().playerName;
+                        // Check super admin status
+                        try {
+                            const adminCheck = await callFunction('checkSuperAdmin', {});
+                            isSuperAdmin = (adminCheck.data && adminCheck.data.isSuperAdmin) || false;
+                        } catch (e) {
+                            isSuperAdmin = false;
+                        }
+                        showApp();
+                        didInit = false; // Reset so init() can re-run after sign-out/sign-in
+                        init();
+                    } else {
+                        showPlayerPicker();
+                    }
+                } catch (error) {
+                    console.error('Error loading user profile:', error);
+                    showPlayerPicker();
+                }
+            } else {
+                currentUser = null;
+                currentPlayerName = null;
+                isSuperAdmin = false;
+                cleanupListeners();
+                showLoginScreen();
+            }
+        });
+
+        // Sign in with Google (popup with redirect fallback)
+        async function signInWithGoogle() {
+            const spinner = document.getElementById('loginSpinner');
+            if (spinner) spinner.classList.add('active');
+            try {
+                await signInWithPopup(auth, googleProvider);
+            } catch (error) {
+                if (error.code === 'auth/popup-blocked' ||
+                    error.code === 'auth/popup-closed-by-user' ||
+                    error.code === 'auth/cancelled-popup-request') {
+                    await signInWithRedirect(auth, googleProvider);
                 } else {
-                    lockBtn.textContent = '🔒 Unlock App for Editing';
-                    lockBtn.className = 'btn btn-primary';
-                    lockBtn.onclick = unlockApp;
+                    console.error('Sign-in error:', error);
+                    if (spinner) spinner.classList.remove('active');
+                    showToast('Sign-in failed: ' + error.message, 'error');
                 }
             }
+        }
+        window.signInWithGoogle = signInWithGoogle;
 
-            if (lockStatus) {
-                if (isAppUnlocked) {
-                    lockStatus.innerHTML = '<span style="color: #6ECEB2; font-weight: 600;">✅ App Unlocked - Editing Enabled</span>';
-                } else {
-                    lockStatus.innerHTML = '<span style="color: #ff6b6b; font-weight: 600;">🔒 App Locked - View Only Mode</span>';
-                }
+        // Sign out
+        async function handleSignOut() {
+            try {
+                await signOut(auth);
+                // onAuthStateChanged handles cleanup
+            } catch (error) {
+                console.error('Sign-out error:', error);
+                showToast('Sign-out failed', 'error');
             }
+        }
+        window.handleSignOut = handleSignOut;
 
-            // Update vote admin section visibility
-            if (typeof updateVoteAdminSection === 'function') {
-                updateVoteAdminSection();
+        // Cleanup all Firestore listeners on sign-out
+        function cleanupListeners() {
+            if (finesUnsubscribe) { finesUnsubscribe(); finesUnsubscribe = null; }
+            if (batonUnsubscribe) { batonUnsubscribe(); batonUnsubscribe = null; }
+            if (votingUnsubscribe) { votingUnsubscribe(); votingUnsubscribe = null; }
+        }
+
+        // Show/hide screens based on auth state
+        function showLoginScreen() {
+            const loginScreen = document.getElementById('loginScreen');
+            const appShell = document.querySelector('.app-shell');
+            const tabBar = document.querySelector('.tab-bar');
+            const picker = document.getElementById('playerPickerModal');
+            if (loginScreen) loginScreen.classList.remove('hidden');
+            if (appShell) appShell.classList.remove('authenticated');
+            if (tabBar) tabBar.style.display = 'none';
+            if (picker) picker.classList.remove('active');
+        }
+
+        function showApp() {
+            const loginScreen = document.getElementById('loginScreen');
+            const appShell = document.querySelector('.app-shell');
+            const tabBar = document.querySelector('.tab-bar');
+            const picker = document.getElementById('playerPickerModal');
+            if (loginScreen) loginScreen.classList.add('hidden');
+            if (appShell) appShell.classList.add('authenticated');
+            if (tabBar) tabBar.style.display = '';
+            if (picker) picker.classList.remove('active');
+            updateProfileUI();
+        }
+
+        function showPlayerPicker() {
+            const loginScreen = document.getElementById('loginScreen');
+            const appShell = document.querySelector('.app-shell');
+            const tabBar = document.querySelector('.tab-bar');
+            const picker = document.getElementById('playerPickerModal');
+            if (loginScreen) loginScreen.classList.add('hidden');
+            if (appShell) appShell.classList.remove('authenticated');
+            if (tabBar) tabBar.style.display = 'none';
+            if (picker) picker.classList.add('active');
+            loadPlayerPickerOptions();
+        }
+
+        // Load available player names for the picker
+        async function loadPlayerPickerOptions() {
+            const select = document.getElementById('playerPickerSelect');
+            if (!select) return;
+
+            select.innerHTML = '<option value="">Loading...</option>';
+
+            try {
+                // Load player list from config
+                const playersDoc = await getDoc(doc(db, 'config', 'players'));
+                const playerList = playersDoc.exists() ? (playersDoc.data().list || []) : [];
+
+                // Load claimed names
+                const claimsSnapshot = await getDocs(collection(db, 'playerNames'));
+                const claimedNames = new Set();
+                claimsSnapshot.forEach(d => claimedNames.add(d.id));
+
+                // Player list may be objects ({name: "Arron", ...}) or strings
+                const playerNames = playerList.map(p => typeof p === 'object' ? p.name : p);
+
+                // Show only unclaimed names (plus current user's name if changing)
+                const availableNames = playerNames.filter(name =>
+                    !claimedNames.has(name) || (currentPlayerName && name === currentPlayerName)
+                );
+
+                select.innerHTML = '<option value="">Select your name...</option>';
+                availableNames.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    select.appendChild(option);
+                });
+
+                if (availableNames.length === 0) {
+                    select.innerHTML = '<option value="">No names available</option>';
+                }
+            } catch (error) {
+                console.error('Error loading player names:', error);
+                select.innerHTML = '<option value="">Error loading names</option>';
             }
         }
 
-        // Unlock app with password
-        async function unlockApp() {
-            const password = prompt('Enter admin password to unlock app:');
-            if (!password) {
+        // Confirm player name pick
+        async function confirmPlayerPick() {
+            const select = document.getElementById('playerPickerSelect');
+            const errorEl = document.getElementById('pickerError');
+            const playerName = select ? select.value : '';
+
+            if (!playerName) {
+                if (errorEl) { errorEl.textContent = 'Please select a name'; errorEl.style.display = 'block'; }
                 return;
             }
 
-            // Verify password by trying a harmless operation (get players)
+            if (errorEl) errorEl.style.display = 'none';
+
             try {
-                // Just validate the password format is correct
-                adminPassword = password;
-                sessionStorage.setItem('adminPassword', password);
-                isAppUnlocked = true;
-                updateLockStatus();
-                updateAdminPanelVisibility();
-                showToast('App unlocked! You can now edit.', 'success');
+                await callFunction('claimPlayerName', { playerName });
+                currentPlayerName = playerName;
+
+                // Check super admin
+                try {
+                    const adminCheck = await callFunction('checkSuperAdmin', {});
+                    isSuperAdmin = (adminCheck.data && adminCheck.data.isSuperAdmin) || false;
+                } catch (e) {
+                    isSuperAdmin = false;
+                }
+
+                showApp();
+                didInit = false;
+                init();
+                showToast(`Welcome, ${playerName}!`, 'success');
             } catch (error) {
-                adminPassword = null;
-                sessionStorage.removeItem('adminPassword');
-                isAppUnlocked = false;
-                updateLockStatus();
-                updateAdminPanelVisibility();
-                showToast('Failed to unlock app', 'error');
+                console.error('Error claiming name:', error);
+                if (errorEl) { errorEl.textContent = error.message || 'Failed to claim name'; errorEl.style.display = 'block'; }
+            }
+        }
+        window.confirmPlayerPick = confirmPlayerPick;
+
+        function showNotListedMessage() {
+            const errorEl = document.getElementById('pickerError');
+            if (errorEl) {
+                errorEl.textContent = 'Contact the group admin to be added as a player.';
+                errorEl.style.display = 'block';
+            }
+        }
+        window.showNotListedMessage = showNotListedMessage;
+
+        // Open player picker from settings (to change name)
+        function openPlayerPicker() {
+            showPlayerPicker();
+        }
+        window.openPlayerPicker = openPlayerPicker;
+
+        // Update profile UI elements
+        function updateProfileUI() {
+            if (!currentUser) return;
+
+            const displayName = currentUser.displayName || currentUser.email || '';
+            const email = currentUser.email || '';
+            const photoURL = currentUser.photoURL || '';
+            const initial = (currentPlayerName || displayName || '?')[0].toUpperCase();
+
+            // Header avatar
+            const headerAvatar = document.getElementById('headerUserAvatar');
+            if (headerAvatar) {
+                if (photoURL) {
+                    headerAvatar.outerHTML = `<img id="headerUserAvatar" class="user-avatar" src="${photoURL}" alt="${initial}" onerror="this.outerHTML='<div id=headerUserAvatar class=user-avatar-fallback>${initial}</div>'">`;
+                } else {
+                    headerAvatar.textContent = initial;
+                }
+            }
+
+            // Settings profile card
+            const profileName = document.getElementById('profileDisplayName');
+            const profileEmail = document.getElementById('profileEmail');
+            const profilePlayer = document.getElementById('profilePlayerName');
+            const profileAvatar = document.getElementById('profileAvatarLarge');
+
+            if (profileName) profileName.textContent = displayName;
+            if (profileEmail) profileEmail.textContent = email;
+            if (profilePlayer) profilePlayer.textContent = currentPlayerName || 'Not set';
+
+            if (profileAvatar) {
+                if (photoURL) {
+                    profileAvatar.outerHTML = `<img id="profileAvatarLarge" class="profile-avatar-large" src="${photoURL}" alt="${initial}" onerror="this.outerHTML='<div id=profileAvatarLarge class=profile-avatar-large-fallback>${initial}</div>'">`;
+                } else {
+                    profileAvatar.textContent = initial;
+                }
+            }
+
+            // Voting player name display
+            const votingName = document.getElementById('votingPlayerName');
+            if (votingName) votingName.textContent = currentPlayerName || '-';
+
+            // Super admin panel
+            const superAdminPanel = document.getElementById('superAdminPanel');
+            if (superAdminPanel) {
+                if (isSuperAdmin) {
+                    superAdminPanel.classList.add('visible');
+                } else {
+                    superAdminPanel.classList.remove('visible');
+                }
+            }
+
+            // Vote admin section - always visible for logged-in users
+            const voteAdminSection = document.getElementById('voteAdminSection');
+            if (voteAdminSection) voteAdminSection.style.display = 'block';
+        }
+
+        // Super admin functions
+        let superAdminUsersList = [];
+
+        async function loadSuperAdminUsers() {
+            try {
+                showLoading('Loading users...');
+                const result = await callFunction('listAllUsers', {});
+                hideLoading();
+                superAdminUsersList = (result.data && result.data.users) || [];
+
+                // Render users table
+                const container = document.getElementById('superAdminUsersContainer');
+                if (container) {
+                    if (superAdminUsersList.length === 0) {
+                        container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 10px;">No registered users</div>';
+                    } else {
+                        container.innerHTML = '<table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85em;">' +
+                            '<thead><tr><th style="text-align: left; padding: 6px; background: #152C6B; border-radius: 4px 0 0 0;">Player</th><th style="text-align: left; padding: 6px; background: #152C6B;">Email</th></tr></thead>' +
+                            '<tbody>' + superAdminUsersList.map(u =>
+                                `<tr style="border-bottom: 1px solid #2E5AB0;"><td style="padding: 6px; color: #FFCD00;">${u.playerName || '(unclaimed)'}</td><td style="padding: 6px; color: #A8BDE0;">${u.email}</td></tr>`
+                            ).join('') + '</tbody></table>';
+                    }
+                }
+
+                // Populate dropdowns
+                populateSuperAdminDropdowns();
+            } catch (error) {
+                hideLoading();
+                showToast('Failed to load users: ' + error.message, 'error');
+            }
+        }
+        window.loadSuperAdminUsers = loadSuperAdminUsers;
+
+        function populateSuperAdminDropdowns() {
+            const reassignUserSelect = document.getElementById('reassignUserSelect');
+            const removeClaimUserSelect = document.getElementById('removeClaimUserSelect');
+            const reassignNameSelect = document.getElementById('reassignNameSelect');
+
+            const userOptions = '<option value="">Select user...</option>' +
+                superAdminUsersList.map(u =>
+                    `<option value="${u.uid}">${u.playerName || '(unclaimed)'} — ${u.email}</option>`
+                ).join('');
+
+            if (reassignUserSelect) reassignUserSelect.innerHTML = userOptions;
+            if (removeClaimUserSelect) {
+                // Only show users who have a claim
+                const claimedUsers = superAdminUsersList.filter(u => u.playerName);
+                removeClaimUserSelect.innerHTML = '<option value="">Select user...</option>' +
+                    claimedUsers.map(u =>
+                        `<option value="${u.uid}">${u.playerName} — ${u.email}</option>`
+                    ).join('');
+            }
+
+            // Populate name dropdown with all player names
+            if (reassignNameSelect) {
+                reassignNameSelect.innerHTML = '<option value="">Select new name...</option>' +
+                    allPlayers.map(p =>
+                        `<option value="${p.name}">${p.name}</option>`
+                    ).join('');
             }
         }
 
-        // Lock app
-        function lockApp() {
-            adminPassword = null;
-            sessionStorage.removeItem('adminPassword');
-            isAppUnlocked = false;
-            updateLockStatus();
-            updateAdminPanelVisibility();
-            showToast('App locked. View-only mode.', 'info');
-        }
+        async function superAdminReassign() {
+            const userSelect = document.getElementById('reassignUserSelect');
+            const nameSelect = document.getElementById('reassignNameSelect');
+            const uid = userSelect ? userSelect.value : '';
+            const newName = nameSelect ? nameSelect.value : '';
 
-        // Get admin password (auto-prompts if locked, stays unlocked for the session)
-        async function getAdminPassword(actionDescription = 'this action') {
-            if (isAppUnlocked && adminPassword) {
-                return adminPassword;
-            }
-            // Auto-prompt for password
-            const password = prompt(`Enter admin password to unlock app for ${actionDescription}:`);
-            if (!password) {
-                throw new Error('Password required to proceed.');
-            }
-            adminPassword = password;
-            sessionStorage.setItem('adminPassword', password);
-            isAppUnlocked = true;
-            updateLockStatus();
-            updateAdminPanelVisibility();
-            showToast('App unlocked! You can now edit.', 'success');
-            return adminPassword;
-        }
+            if (!uid) { showToast('Please select a user', 'error'); return; }
+            if (!newName) { showToast('Please select a name', 'error'); return; }
 
-        // Clear cached password (on invalid password error)
-        function clearAdminPassword() {
-            adminPassword = null;
-            sessionStorage.removeItem('adminPassword');
-            isAppUnlocked = false;
-            updateLockStatus();
-        }
-
-        // Handle permission denied errors
-        function handlePermissionError(error, actionDescription) {
-            if (error.code === 'functions/permission-denied') {
-                clearAdminPassword();
-                showToast('Invalid password. App locked. Please unlock again in Settings.', 'error');
-                throw error;
+            try {
+                showLoading('Reassigning...');
+                await callFunction('reassignPlayerName', { targetUid: uid, newPlayerName: newName });
+                hideLoading();
+                showToast('Player name reassigned', 'success');
+                await loadSuperAdminUsers();
+            } catch (error) {
+                hideLoading();
+                showToast('Failed: ' + error.message, 'error');
             }
-            throw error;
         }
+        window.superAdminReassign = superAdminReassign;
+
+        async function superAdminRemoveClaim() {
+            const userSelect = document.getElementById('removeClaimUserSelect');
+            const uid = userSelect ? userSelect.value : '';
+
+            if (!uid) { showToast('Please select a user', 'error'); return; }
+
+            const user = superAdminUsersList.find(u => u.uid === uid);
+            if (!confirm(`Remove ${user ? user.playerName : 'this user'}'s player name claim?`)) return;
+
+            try {
+                showLoading('Removing...');
+                await callFunction('removeUserClaim', { targetUid: uid });
+                hideLoading();
+                showToast('Claim removed', 'success');
+                await loadSuperAdminUsers();
+            } catch (error) {
+                hideLoading();
+                showToast('Failed: ' + error.message, 'error');
+            }
+        }
+        window.superAdminRemoveClaim = superAdminRemoveClaim;
+
+        async function superAdminResetAll() {
+            if (!confirm('This will remove ALL player name claims. Everyone will need to re-pick their name. Are you sure?')) return;
+            try {
+                showLoading('Resetting...');
+                await callFunction('resetAllClaims', {});
+                hideLoading();
+                showToast('All claims reset', 'success');
+                await loadSuperAdminUsers();
+            } catch (error) {
+                hideLoading();
+                showToast('Failed: ' + error.message, 'error');
+            }
+        }
+        window.superAdminResetAll = superAdminResetAll;
 
         // CANONICAL DATASET SELECTOR FOR ANALYTICS
         // Single source of truth: returns full history if loaded, else recent 200
@@ -253,19 +576,9 @@
         }
 
         // ADMIN TEAM ID FINDER
-        // Uses main app unlock - no separate PIN needed
+        // All authenticated users have access
         function updateAdminPanelVisibility() {
-            const lockScreen = document.getElementById('adminLockScreen');
-            const unlockedPanel = document.getElementById('adminUnlockedPanel');
-            if (lockScreen && unlockedPanel) {
-                if (isAppUnlocked) {
-                    lockScreen.style.display = 'none';
-                    unlockedPanel.style.display = 'block';
-                } else {
-                    lockScreen.style.display = 'block';
-                    unlockedPanel.style.display = 'none';
-                }
-            }
+            // No lock screen needed - all authenticated users have full access
         }
 
         // Team search results cache
@@ -283,8 +596,7 @@
             resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #A8BDE0;">Searching...</div>';
 
             try {
-                const password = await getAdminPassword('searching teams');
-                const result = await callFunction('searchTeams', { query, adminPassword: password });
+                const result = await callFunction('searchTeams', { query });
 
                 teamSearchResults = result.data || [];
 
@@ -325,9 +637,6 @@
                 console.error('Error searching teams:', error);
                 resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">Error searching teams: ' + error.message + '</div>';
                 showToast('Search failed: ' + error.message, 'error');
-                if (error.code === 'functions/permission-denied') {
-                    handlePermissionError(error, 'searching teams');
-                }
             }
         }
 
@@ -337,7 +646,6 @@
 
             try {
                 showLoading('Saving team...');
-                const password = await getAdminPassword('saving team');
 
                 const teamData = {
                     teamId: team.teamId,
@@ -348,15 +656,13 @@
                     createdAt: new Date().toISOString()
                 };
 
-                
-                await callFunction('saveTeam', { team: teamData, adminPassword: password });
+                await callFunction('saveTeam', { team: teamData });
 
                 hideLoading();
                 showToast(`${team.teamName} saved to known teams`, 'success');
 
             } catch (error) {
                 console.error('Error saving team:', error);
-                handlePermissionError(error, 'saving team');
                 hideLoading();
                 showToast('Failed to save team', 'error');
             }
@@ -372,7 +678,6 @@
 
             try {
                 showLoading('Updating baton holder...');
-                const password = await getAdminPassword('setting baton holder');
 
                 const holderData = {
                     holderTeamId: team.teamId,
@@ -384,7 +689,7 @@
                     updatedBy: 'admin'
                 };
 
-                await callFunction('setBatonHolder', { holder: holderData, adminPassword: password });
+                await callFunction('setBatonHolder', { holder: holderData });
 
                 // Also save to known teams
                 await saveToKnownTeams(index);
@@ -394,7 +699,6 @@
 
             } catch (error) {
                 console.error('Error setting baton holder:', error);
-                handlePermissionError(error, 'setting baton holder');
                 hideLoading();
                 showToast('Failed to set baton holder', 'error');
             }
@@ -405,10 +709,6 @@
         let selectedMatchResult = null;
 
         async function selectMatchResult(result) {
-            try {
-                await getAdminPassword('recording match result');
-            } catch (e) { return; }
-
             selectedMatchResult = result;
 
             // Update button styles
@@ -468,7 +768,6 @@
 
             try {
                 showLoading('Recording match result...');
-                const password = await getAdminPassword('recording match');
 
                 const holderTeamName = currentBatonHolder.holderTeamName;
                 const holderTeamId = currentBatonHolder.holderTeamId;
@@ -496,7 +795,7 @@
                 };
 
                 // Add to baton history
-                await callFunction('addBatonEntry', { entry: historyEntry, adminPassword: password });
+                await callFunction('addBatonEntry', { entry: historyEntry });
 
                 // If baton moved, update current holder
                 if (batonMoved) {
@@ -509,7 +808,7 @@
                         lastUpdatedAt: new Date().toISOString(),
                         updatedBy: 'manual'
                     };
-                    await callFunction('setBatonHolder', { holder: newHolder, adminPassword: password });
+                    await callFunction('setBatonHolder', { holder: newHolder });
                 }
 
                 hideLoading();
@@ -548,7 +847,6 @@
             } catch (error) {
                 console.error('Error recording match:', error);
                 hideLoading();
-                handlePermissionError(error, 'recording match');
                 showToast('Failed to record match: ' + error.message, 'error');
             }
         }
@@ -563,10 +861,6 @@
 
         // Add historical baton entry (for backfilling)
         async function addHistoricalEntry() {
-            try {
-                await getAdminPassword('adding historical entry');
-            } catch (e) { return; }
-
             const matchDate = document.getElementById('historyDate').value;
             const fromTeam = document.getElementById('historyFromTeam').value.trim();
             const toTeam = document.getElementById('historyToTeam').value.trim();
@@ -593,7 +887,6 @@
 
             try {
                 showLoading('Adding historical entry...');
-                const password = await getAdminPassword('adding historical entry');
 
                 const historyEntry = {
                     previousHolderTeamId: null,
@@ -613,7 +906,7 @@
                     entryType: 'historical'
                 };
 
-                await callFunction('addBatonEntry', { entry: historyEntry, adminPassword: password });
+                await callFunction('addBatonEntry', { entry: historyEntry });
 
                 hideLoading();
                 showToast('Historical entry added!', 'success');
@@ -632,17 +925,12 @@
             } catch (error) {
                 console.error('Error adding historical entry:', error);
                 hideLoading();
-                handlePermissionError(error, 'adding historical entry');
                 showToast('Failed to add entry: ' + error.message, 'error');
             }
         }
 
         // Automated Baton Update - calls cloud function to check latest match
         async function manualUpdateBaton() {
-            try {
-                await getAdminPassword('updating baton');
-            } catch (e) { return; }
-
             if (!currentBatonHolder || !currentBatonHolder.holderTeamId) {
                 showToast('No baton holder set with a team ID. Use Team ID Finder first.', 'error');
                 return;
@@ -650,24 +938,13 @@
 
             try {
                 showLoading('Checking latest match result...');
-                const password = await getAdminPassword('updating baton');
 
-                // Call the updateBaton cloud function (onCall format)
-                const response = await fetch(`${FUNCTIONS_URL}/updateBaton`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: { adminPassword: password } })
-                });
-
-                const result = await response.json();
-
-                if (result.error) {
-                    throw new Error(result.error.message || 'Update failed');
-                }
+                // Call the updateBaton cloud function (now onRequest)
+                const result = await callFunction('updateBaton', {});
 
                 hideLoading();
 
-                const data = result.result || result;
+                const data = result.data || result;
                 if (data && data.batonMoved) {
                     showToast(`Baton moved to ${data.newHolderTeamName || 'new holder'}!`, 'success');
                     alert(`BATON MOVED!\n\n${data.reason || 'Baton has been transferred.'}`);
@@ -684,17 +961,12 @@
             } catch (error) {
                 console.error('Error updating baton:', error);
                 hideLoading();
-                handlePermissionError(error, 'updating baton');
                 showToast('Failed to update baton: ' + error.message, 'error');
             }
         }
 
         // Opponent team search functions
         async function searchOpponentTeam() {
-            try {
-                await getAdminPassword('searching teams');
-            } catch (e) { return; }
-
             const searchInput = document.getElementById('opponentSearchInput');
             const resultsDiv = document.getElementById('opponentSearchResults');
             const searchQuery = searchInput.value.trim();
@@ -707,7 +979,7 @@
             resultsDiv.innerHTML = '<p style="color: #A8BDE0; padding: 10px;">Searching...</p>';
 
             try {
-                const result = await callFunction('searchTeams', { query: searchQuery, adminPassword });
+                const result = await callFunction('searchTeams', { query: searchQuery });
                 const teams = result.data || [];
 
                 if (teams.length === 0) {
@@ -881,7 +1153,6 @@
         window.deleteBatonEntry = deleteBatonEntry;
         window.addHistoricalEntry = addHistoricalEntry;
         window.manualUpdateBaton = manualUpdateBaton;
-        window.unlockApp = unlockApp;
         window.markAllPaid = markAllPaid;
         window.markAllPaidSettings = markAllPaidSettings;
         window.closeMarkAllModal = closeMarkAllModal;
@@ -1049,9 +1320,6 @@
                     console.log('💾 Saving fines for', selectedPlayers.length, 'player(s)...');
                     showLoading(`Adding fine${selectedPlayers.length > 1 ? 's' : ''}...`);
 
-                    // Get admin password
-                    const password = await getAdminPassword('adding fines');
-
                     // Add a fine for each selected player
                     for (const playerName of selectedPlayers) {
                         const fine = {
@@ -1064,10 +1332,10 @@
                             timestamp: new Date().toISOString()
                         };
                         try {
-                            await callFunction('addFine', { fine, adminPassword: password });
+                            await callFunction('addFine', { fine });
                             console.log('✅ Saved fine for', playerName);
                         } catch (error) {
-                            handlePermissionError(error, 'adding fines');
+                            console.error('Error adding fine:', error);
                         }
                     }
 
@@ -1482,10 +1750,6 @@
                 return;
             }
 
-            let password;
-            try {
-                password = await getAdminPassword('deleting player');
-            } catch (e) { return; }
             showLoading('Deleting player...');
 
             allPlayers = allPlayers.filter(p => p.name !== name);
@@ -1495,9 +1759,9 @@
             
             for (const fine of playerFines) {
                 try {
-                    await callFunction('deleteFine', { fineId: fine.id, adminPassword: password });
+                    await callFunction('deleteFine', { fineId: fine.id });
                 } catch (error) {
-                    handlePermissionError(error, 'deleting fines');
+                    console.error('Error deleting fine:', error);
                 }
             }
 
@@ -1516,10 +1780,6 @@
                 return;
             }
 
-            let password;
-            try {
-                password = await getAdminPassword('deleting player');
-            } catch (e) { return; }
             showLoading('Deleting player and fines...');
 
             allPlayers = allPlayers.filter(p => p.name !== name);
@@ -1529,9 +1789,9 @@
             
             for (const fine of playerFines) {
                 try {
-                    await callFunction('deleteFine', { fineId: fine.id, adminPassword: password });
+                    await callFunction('deleteFine', { fineId: fine.id });
                 } catch (error) {
-                    handlePermissionError(error, 'deleting fines');
+                    console.error('Error deleting fine:', error);
                 }
             }
 
@@ -1542,15 +1802,12 @@
 
         async function savePlayers() {
             try {
-                const password = await getAdminPassword('saving players');
-                
-                await callFunction('updatePlayers', { players: allPlayers, adminPassword: password });
+                await callFunction('updatePlayers', { players: allPlayers });
                 updatePlayerDropdowns();
                 updateManagePlayersTable();
                 updateSettingsPlayersTable();
             } catch (error) {
-                handlePermissionError(error, 'saving players');
-                console.error('Error:', error);
+                console.error('Error saving players:', error);
             }
         }
 
@@ -1563,11 +1820,6 @@
 
             // Remember last tab
             localStorage.setItem('lastTab', tabName);
-
-            // Update lock status when switching to settings
-            if (tabName === 'settings') {
-                updateLockStatus();
-            }
 
             // Update baton form holder name when switching to baton tab
             if (tabName === 'baton') {
@@ -2395,13 +2647,10 @@
             if (confirm('Delete this entry?')) {
                 try {
                     showLoading('Deleting...');
-                    const password = await getAdminPassword('deleting baton entry');
-                    
-                    await callFunction('deleteBatonEntry', { entryId: id, adminPassword: password });
+                    await callFunction('deleteBatonEntry', { entryId: id });
                     hideLoading();
                     showToast('Entry deleted', 'success');
                 } catch (error) {
-                    handlePermissionError(error, 'deleting baton entry');
                     hideLoading();
                     showToast('Failed to delete entry', 'error');
                 }
@@ -2567,31 +2816,23 @@
             }
 
             try {
-                const password = await getAdminPassword('marking fine as paid');
-                
                 await callFunction('updateFine', {
                     fineId: currentPaidFineId,
                     updates: { paid: true, paidDate: paidDate },
-                    adminPassword: password
                 });
                 closePaidModal();
             } catch (error) {
-                handlePermissionError(error, 'marking fine as paid');
                 alert('❌ Failed to update');
             }
         }
 
         async function confirmUnpaid(id) {
             try {
-                const password = await getAdminPassword('marking fine as unpaid');
-
                 await callFunction('updateFine', {
                     fineId: id,
                     updates: { paid: false, paidDate: null },
-                    adminPassword: password
                 });
             } catch (error) {
-                handlePermissionError(error, 'marking fine as unpaid');
                 alert('❌ Failed to update');
             }
         }
@@ -2689,13 +2930,11 @@
 
             try {
                 showLoading(`Marking ${fineIds.length} fines as paid...`);
-                const password = await getAdminPassword('marking fines as paid');
 
                 for (const fineId of fineIds) {
                     await callFunction('updateFine', {
                         fineId: fineId,
                         updates: { paid: true, paidDate: paidDate },
-                        adminPassword: password
                     });
                 }
 
@@ -2708,7 +2947,6 @@
                 await refreshHistory();
             } catch (error) {
                 hideLoading();
-                handlePermissionError(error, 'marking fines as paid');
                 alert('❌ Failed to update some fines');
             }
         }
@@ -2728,13 +2966,11 @@
 
             try {
                 showLoading(`Marking ${fineIds.length} fines as unpaid...`);
-                const password = await getAdminPassword('marking fines as unpaid');
 
                 for (const fineId of fineIds) {
                     await callFunction('updateFine', {
                         fineId: fineId,
                         updates: { paid: false, paidDate: null },
-                        adminPassword: password
                     });
                 }
 
@@ -2746,7 +2982,6 @@
                 await refreshHistory();
             } catch (error) {
                 hideLoading();
-                handlePermissionError(error, 'marking fines as unpaid');
                 alert('❌ Failed to update some fines');
             }
         }
@@ -2785,20 +3020,17 @@
 
             try {
                 showLoading(`Marking ${unpaidFines.length} fines as paid...`);
-                const password = await getAdminPassword('marking all fines as paid');
-                
+
                 for (const fine of unpaidFines) {
                     await callFunction('updateFine', {
                         fineId: fine.id,
                         updates: { paid: true, paidDate: paidDate },
-                        adminPassword: password
                     });
                 }
                 hideLoading();
                 showToast(`Marked ${unpaidFines.length} fines as paid!`, 'success');
                 closeMarkAllModal();
             } catch (error) {
-                handlePermissionError(error, 'marking all as paid');
                 hideLoading();
                 showToast('Failed to mark all as paid', 'error');
             }
@@ -2808,13 +3040,11 @@
             if (confirm('Delete this fine?')) {
                 try {
                     showLoading('Deleting...');
-                    const password = await getAdminPassword('deleting fine');
-                    
-                    await callFunction('deleteFine', { fineId: id, adminPassword: password });
+
+                    await callFunction('deleteFine', { fineId: id });
                     hideLoading();
                     showToast('Fine deleted', 'success');
                 } catch (error) {
-                    handlePermissionError(error, 'deleting fine');
                     hideLoading();
                     showToast('Failed to delete fine', 'error');
                 }
@@ -2827,13 +3057,11 @@
 
             try {
                 showLoading('Clearing all fines...');
-                const password = await getAdminPassword('clearing all fines');
-                
-                const result = await callFunction('deleteAllFines', { adminPassword: password });
+
+                const result = await callFunction('deleteAllFines', {});
                 hideLoading();
                 showToast(`Cleared ${result.data.count} fines successfully`, 'success');
             } catch (error) {
-                handlePermissionError(error, 'clearing all fines');
                 hideLoading();
                 showToast('Failed to clear fines', 'error');
             }
@@ -3347,15 +3575,12 @@
             }
 
             try {
-                // Get admin password
-                const password = await getAdminPassword(replaceAll ? 'replacing all fines' : 'importing fines');
-
                 // If replaceAll, delete all existing fines first
                 if (replaceAll) {
                     showLoading('Deleting all existing fines...');
                     showImportAlert('Deleting all existing fines...', 'info');
                     
-                    const result = await callFunction('deleteAllFines', { adminPassword: password });
+                    const result = await callFunction('deleteAllFines', {});
                     showImportAlert(`Deleted ${result.data.count} existing fines`, 'success');
                 }
 
@@ -3367,7 +3592,7 @@
                 let imported = 0;
                 
                 for (const fine of fines) {
-                    await callFunction('addFine', { fine, adminPassword: password });
+                    await callFunction('addFine', { fine });
                     imported++;
 
                     // Update progress every 50 fines
@@ -3384,7 +3609,6 @@
                 showToast(successMsg, 'success');
             } catch (error) {
                 console.error('Import error:', error);
-                handlePermissionError(error, 'importing CSV');
                 hideLoading();
                 const errorMsg = `❌ Import failed. Error: ${error.message}`;
                 showImportAlert(errorMsg, 'error');
@@ -3471,14 +3695,11 @@
 
         async function saveFineReasons() {
             try {
-                const password = await getAdminPassword('saving fine reasons');
-                
-                await callFunction('updateFineReasons', { fineReasons, adminPassword: password });
+                await callFunction('updateFineReasons', { fineReasons });
                 populateFineReasons();
                 updateFineReasonsTable();
             } catch (error) {
-                handlePermissionError(error, 'saving fine reasons');
-                console.error('Error:', error);
+                console.error('Error saving fine reasons:', error);
             }
         }
 
@@ -4178,6 +4399,7 @@
         async function initializeVoting() {
             updateVotingDropdowns();
             updateVotingStatus();
+            checkExistingVote();
             await loadLastNightResults();
             await loadAllTimeVoteTotals();
             setupTodayVotesListener();
@@ -4188,19 +4410,21 @@
 
         // Update voting player dropdowns
         function updateVotingDropdowns() {
-            const voterSelect = document.getElementById('votingVoterName');
             const bestSelect = document.getElementById('votingBestPlayer');
             const worstSelect = document.getElementById('votingWorstPlayer');
 
-            if (!voterSelect || !bestSelect || !worstSelect) return;
+            if (!bestSelect || !worstSelect) return;
 
             const playerOptions = allPlayers.map(p =>
                 `<option value="${p.name}">${p.name}</option>`
             ).join('');
 
-            voterSelect.innerHTML = '<option value="">Select your name...</option>' + playerOptions;
             bestSelect.innerHTML = '<option value="">Select best player...</option>' + playerOptions;
             worstSelect.innerHTML = '<option value="">Select worst player...</option>' + playerOptions;
+
+            // Update the "Voting as" display
+            const votingPlayerName = document.getElementById('votingPlayerName');
+            if (votingPlayerName) votingPlayerName.textContent = currentPlayerName || '';
         }
 
         // Update voting status banner
@@ -4470,7 +4694,7 @@
 
         // Check if user has already voted today and show appropriate UI
         function checkExistingVote() {
-            const voterName = document.getElementById('votingVoterName').value;
+            const voterName = currentPlayerName;
             const submitBtn = document.getElementById('submitVoteBtn');
             const bestSelect = document.getElementById('votingBestPlayer');
             const worstSelect = document.getElementById('votingWorstPlayer');
@@ -4478,7 +4702,7 @@
             const summaryCard = document.getElementById('voteSummaryCard');
 
             if (!voterName) {
-                // No name selected - show form, hide summary
+                // No player name set - show form, hide summary
                 if (formContainer) formContainer.style.display = 'block';
                 if (summaryCard) summaryCard.style.display = 'none';
                 return;
@@ -4526,7 +4750,6 @@
         function enableVoteEdit() {
             const formContainer = document.getElementById('votingFormContainer');
             const summaryCard = document.getElementById('voteSummaryCard');
-            const voterSelect = document.getElementById('votingVoterName');
             const formTitle = document.getElementById('votingFormTitle');
             const cancelBtn = document.getElementById('cancelEditBtn');
             const submitBtn = document.getElementById('submitVoteBtn');
@@ -4536,12 +4759,6 @@
             // Show form, hide summary
             if (formContainer) formContainer.style.display = 'block';
             if (summaryCard) summaryCard.style.display = 'none';
-
-            // Lock voter name to prevent editing others' votes
-            if (voterSelect) {
-                voterSelect.value = editingVoterName;
-                voterSelect.disabled = true;
-            }
 
             // Update UI for edit mode
             if (formTitle) formTitle.textContent = '✏️ Edit Your Vote';
@@ -4560,14 +4777,10 @@
 
         // Cancel vote editing
         function cancelVoteEdit() {
-            const voterSelect = document.getElementById('votingVoterName');
             const formTitle = document.getElementById('votingFormTitle');
             const cancelBtn = document.getElementById('cancelEditBtn');
 
             isEditingVote = false;
-
-            // Unlock voter name
-            if (voterSelect) voterSelect.disabled = false;
 
             // Reset UI
             if (formTitle) formTitle.textContent = '🗳️ Cast Your Vote';
@@ -4582,7 +4795,7 @@
 
         // Submit or update vote
         async function submitVote() {
-            const voterName = document.getElementById('votingVoterName').value;
+            const voterName = currentPlayerName;
             const bestPlayer = document.getElementById('votingBestPlayer').value;
             const worstPlayer = document.getElementById('votingWorstPlayer').value;
             const errorEl = document.getElementById('voteValidationError');
@@ -4645,7 +4858,8 @@
                 currentVotes[voterName] = {
                     best: bestPlayer,
                     worst: worstPlayer,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    uid: currentUser.uid
                 };
 
                 // Save to Firestore
@@ -4661,11 +4875,9 @@
                 isEditingVote = false;
                 editingVoterName = voterName;
 
-                // Unlock and reset voter dropdown
-                const voterSelect = document.getElementById('votingVoterName');
+                // Reset form UI
                 const formTitle = document.getElementById('votingFormTitle');
                 const cancelBtn = document.getElementById('cancelEditBtn');
-                if (voterSelect) voterSelect.disabled = false;
                 if (formTitle) formTitle.textContent = '🗳️ Cast Your Vote';
                 if (cancelBtn) cancelBtn.style.display = 'none';
 
@@ -4699,22 +4911,18 @@
         // ADMIN VOTE MANAGEMENT FUNCTIONS
         // =====================================================
 
-        // Update admin section visibility based on lock status
+        // Update admin section visibility - always visible for authenticated users
         function updateVoteAdminSection() {
             const adminSection = document.getElementById('voteAdminSection');
             const dateInput = document.getElementById('adminVoteDate');
 
             if (!adminSection) return;
 
-            if (isAppUnlocked) {
-                adminSection.style.display = 'block';
-                // Default to today's date
-                if (dateInput && !dateInput.value) {
-                    dateInput.value = getTodayDateString();
-                    loadVotesForDate();
-                }
-            } else {
-                adminSection.style.display = 'none';
+            adminSection.style.display = 'block';
+            // Default to today's date
+            if (dateInput && !dateInput.value) {
+                dateInput.value = getTodayDateString();
+                loadVotesForDate();
             }
         }
 
@@ -4831,10 +5039,6 @@
 
         // Save vote edit
         async function saveVoteEdit() {
-            try {
-                await getAdminPassword('editing votes');
-            } catch (e) { return; }
-
             const date = document.getElementById('editVoteDate').value;
             const voter = document.getElementById('editVoteVoter').value;
             const newBest = document.getElementById('editVoteBest').value;
@@ -4860,10 +5064,11 @@
 
                 const currentVotes = dateDoc.data().votes || {};
                 currentVotes[voter] = {
+                    ...currentVotes[voter],
                     best: newBest,
                     worst: newWorst,
                     timestamp: new Date().toISOString(),
-                    editedBy: 'admin'
+                    editedBy: currentUser.uid
                 };
 
                 await setDoc(dateDocRef, { votes: currentVotes, date: date });
@@ -4891,10 +5096,6 @@
 
         // Delete a vote
         async function deleteVote(date, voter) {
-            try {
-                await getAdminPassword('deleting votes');
-            } catch (e) { return; }
-
             if (!confirm(`Delete ${voter}'s vote for ${date}?`)) {
                 return;
             }
@@ -4962,8 +5163,7 @@
             btn.disabled = true;
 
             try {
-                const res = await fetch(`${FUNCTIONS_URL}/logProClubsMatches`);
-                const data = await res.json();
+                const data = await callFunction('logProClubsMatches', {});
 
                 if (data.data) {
                     const { logged, skipped } = data.data;
@@ -4987,8 +5187,7 @@
         // Load logged match history from Firestore
         async function loadLoggedMatches() {
             try {
-                const res = await fetch(`${FUNCTIONS_URL}/getLoggedMatches?limit=100`);
-                const data = await res.json();
+                const data = await callFunctionGet('getLoggedMatches', { limit: 100 });
 
                 if (data.data) {
                     loggedMatchesCache = data.data;
@@ -5070,17 +5269,7 @@
         // Update ANY player for a match
         async function updateMatchAnyPlayer(matchId, anyPlayer) {
             try {
-                const response = await fetch(`${FUNCTIONS_URL}/updateMatchAnyPlayer`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: { matchId, anyPlayer } })
-                });
-
-                const result = await response.json();
-
-                if (result.error) {
-                    throw new Error(result.error.message);
-                }
+                const result = await callFunction('updateMatchAnyPlayer', { matchId, anyPlayer });
 
                 // Update local cache
                 if (loggedMatchesCache && loggedMatchesCache.matches) {
@@ -5112,12 +5301,7 @@
                 btn.textContent = 'Fetching...';
                 container.innerHTML = '<div style="text-align: center; color: #A8BDE0; padding: 20px;">Loading from EA servers...</div>';
 
-                const response = await fetch(`${FUNCTIONS_URL}/getProClubsSquad`);
-                const result = await response.json();
-
-                if (result.error) {
-                    throw new Error(result.error.message || 'Failed to fetch');
-                }
+                const result = await callFunctionGet('getProClubsSquad');
 
                 // Response is wrapped in 'data' object
                 const data = result.data || result;
@@ -5196,12 +5380,7 @@
                 btn.textContent = 'Updating...';
 
                 // Fetch EA data
-                const response = await fetch(`${FUNCTIONS_URL}/getProClubsSquad`);
-                const result = await response.json();
-
-                if (result.error) {
-                    throw new Error(result.error.message || 'Failed to fetch');
-                }
+                const result = await callFunctionGet('getProClubsSquad');
 
                 const data = result.data || result;
 
@@ -5328,13 +5507,8 @@
             container.innerHTML = html;
         }
 
-        // Save player mappings to Firestore
+        // Save player mappings to Firestore via Cloud Function
         async function savePlayerMappings() {
-            if (!adminPassword) {
-                showToast('Please unlock the app first in Settings', 'error');
-                return;
-            }
-
             const eaPlayers = getUniqueEaPlayers();
             const newMappings = {};
 
@@ -5347,7 +5521,7 @@
             }
 
             try {
-                await setDoc(doc(db, 'config', 'playerMappings'), { mappings: newMappings });
+                await callFunction('updatePlayerMappings', { mappings: newMappings });
                 playerMappings = newMappings;
                 showToast('Player mappings saved!', 'success');
             } catch (error) {
@@ -5362,4 +5536,4 @@
         window.savePlayerMappings = savePlayerMappings;
         window.loadPlayerMappings = loadPlayerMappings;
 
-        init();
+        // init() is now called from onAuthStateChanged listener after authentication

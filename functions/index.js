@@ -34,45 +34,51 @@ const EA_API_HEADERS = {
   'sec-fetch-site': 'same-site'
 };
 
-// Admin PIN configuration
-// Set with: firebase functions:config:set admin.pin="YOUR_PIN"
-// IMPORTANT: Password must be set in Firebase config, not in code
-const ADMIN_PIN = functions.config().admin?.pin || process.env.ADMIN_PIN;
+// Super admin configuration
+// Set with: firebase functions:config:set superadmin.email="your-email@gmail.com"
+const SUPER_ADMIN_EMAIL = functions.config().superadmin?.email || process.env.SUPER_ADMIN_EMAIL;
 
-// Helper function to validate admin access (for onCall functions)
-function validateAdmin(password) {
-  if (!ADMIN_PIN) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Admin PIN not configured. Run: firebase functions:config:set admin.pin="YOUR_PIN"'
-    );
+// Firebase Auth token verification (replaces PIN auth)
+async function verifyAuth(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    sendError(res, 401, 'unauthenticated', 'Not authenticated');
+    return null;
   }
-  if (!password || password !== ADMIN_PIN) {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'Invalid admin password'
-    );
+  try {
+    const idToken = authHeader.split('Bearer ')[1];
+    return await admin.auth().verifyIdToken(idToken);
+  } catch (error) {
+    sendError(res, 401, 'unauthenticated', 'Invalid auth token');
+    return null;
   }
 }
 
-// Helper function to validate admin access (for onRequest functions)
-function validateAdminRequest(password, res) {
-  if (!ADMIN_PIN) {
-    sendError(res, 500, 'failed-precondition', 'Admin PIN not configured');
-    return false;
+// Super admin verification
+async function verifySuperAdmin(req, res) {
+  const user = await verifyAuth(req, res);
+  if (!user) return null;
+  if (user.email !== SUPER_ADMIN_EMAIL) {
+    sendError(res, 403, 'permission-denied', 'Super admin access required');
+    return null;
   }
-  if (!password || password !== ADMIN_PIN) {
-    sendError(res, 403, 'permission-denied', 'Invalid admin password');
-    return false;
-  }
-  return true;
+  return user;
 }
 
-// CORS helper for HTTP functions
+// CORS helper for HTTP functions (restricted origins)
 function handleCors(req, res) {
-  res.set('Access-Control-Allow-Origin', '*');
+  const allowedOrigins = [
+    'https://booze-baton.web.app',
+    'https://booze-baton.firebaseapp.com',
+    'http://localhost:5050',
+    'http://localhost:5000'
+  ];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+  }
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -134,9 +140,10 @@ exports.searchTeams = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { query, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { query } = req.body;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return sendError(res, 400, 'invalid-argument', 'Query parameter is required and must be a non-empty string');
@@ -177,18 +184,17 @@ exports.searchTeams = functions.https.onRequest(async (req, res) => {
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Match object or null if no match found
  */
-exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context) => {
-  try {
-    const { teamId, adminPassword } = data;
+exports.getLatestCompetitiveMatch = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
-    // Validate admin access
-    validateAdmin(adminPassword);
+  try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
+    const { teamId } = req.body;
 
     if (!teamId || typeof teamId !== 'number') {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'teamId parameter is required and must be a number'
-      );
+      return sendError(res, 400, 'invalid-argument', 'teamId parameter is required and must be a number');
     }
 
     functions.logger.info(`Fetching latest match for team: ${teamId}`);
@@ -203,34 +209,24 @@ exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context)
 
     if (!result.response || !Array.isArray(result.response) || result.response.length === 0) {
       functions.logger.warn(`No finished matches found for team: ${teamId}`);
-      return null;
+      return sendResponse(res, 200, null);
     }
 
     // Filter out friendlies - only keep competitive matches
-    // Friendlies typically have league.type = "Cup" with league.name containing "Friendly"
-    // or league.id in known friendly league IDs
     const competitiveMatches = result.response.filter(match => {
       const leagueName = match.league.name.toLowerCase();
-      const leagueType = match.league.type;
-
-      // Exclude matches with "friendly" in the name
       if (leagueName.includes('friendly') || leagueName.includes('friendlies')) {
         return false;
       }
-
-      // Exclude club friendlies (league type = "Cup" with specific IDs)
-      // Most competitive matches are either "League" or recognized cup competitions
-      // Known friendly league IDs: 667 (Club Friendlies), etc.
       if (match.league.id === 667) {
         return false;
       }
-
       return true;
     });
 
     if (competitiveMatches.length === 0) {
       functions.logger.warn(`No competitive matches found for team: ${teamId}`);
-      return null;
+      return sendResponse(res, 200, null);
     }
 
     // Sort by date descending and get the most recent
@@ -257,19 +253,11 @@ exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context)
     };
 
     functions.logger.info(`Found latest match: ${matchData.homeTeamName} ${matchData.homeScore}-${matchData.awayScore} ${matchData.awayTeamName}`);
-    return matchData;
+    sendResponse(res, 200, matchData);
 
   } catch (error) {
     functions.logger.error('Error in getLatestCompetitiveMatch:', error);
-
-    if (error instanceof functions.https.HttpsError) {
-      throw error;
-    }
-
-    throw new functions.https.HttpsError(
-      'internal',
-      `Failed to fetch latest match: ${error.message}`
-    );
+    sendError(res, 500, 'internal', `Failed to fetch latest match: ${error.message}`);
   }
 });
 
@@ -286,21 +274,12 @@ exports.getLatestCompetitiveMatch = functions.https.onCall(async (data, context)
  * @param {string} adminPassword - Admin password for authentication
  * @returns {Object} Result of baton update
  */
-exports.updateBaton = functions.https.onCall(async (data, context) => {
-  const admin = require('firebase-admin');
-
-  // Initialize admin if not already done
-  if (!admin.apps.length) {
-    admin.initializeApp();
-  }
-
-  const db = admin.firestore();
+exports.updateBaton = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
 
   try {
-    const { adminPassword } = data;
-
-    // Validate admin access
-    validateAdmin(adminPassword);
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
     functions.logger.info('Starting baton update check...');
 
@@ -308,10 +287,7 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
     const batonDoc = await db.collection('baton_current').doc('holder').get();
 
     if (!batonDoc.exists) {
-      throw new functions.https.HttpsError(
-        'not-found',
-        'No baton holder set. Use Team ID Finder to set initial holder.'
-      );
+      return sendError(res, 404, 'not-found', 'No baton holder set. Use Team ID Finder to set initial holder.');
     }
 
     const currentHolder = batonDoc.data();
@@ -330,12 +306,12 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
 
     if (!matchResult.response || !Array.isArray(matchResult.response) || matchResult.response.length === 0) {
       functions.logger.warn('No finished matches found for holder');
-      return {
+      return sendResponse(res, 200, {
         status: 'no_update',
         message: `No finished matches found for ${holderTeamName}`,
         batonStayed: true,
         holder: holderTeamName
-      };
+      });
     }
 
     // Filter out friendlies
@@ -352,12 +328,12 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
 
     if (competitiveMatches.length === 0) {
       functions.logger.warn('No competitive matches found');
-      return {
+      return sendResponse(res, 200, {
         status: 'no_update',
         message: `No competitive matches found for ${holderTeamName}`,
         batonStayed: true,
         holder: holderTeamName
-      };
+      });
     }
 
     // Sort by date and get most recent
@@ -370,12 +346,12 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
     // 3. Anti-duplicate check
     if (lastProcessedMatchId && latestMatch.fixture.id === lastProcessedMatchId) {
       functions.logger.info('Match already processed');
-      return {
+      return sendResponse(res, 200, {
         status: 'no_update',
         message: 'This match has already been processed',
         batonStayed: true,
         holder: holderTeamName
-      };
+      });
     }
 
     // 4. Determine outcome from holder's perspective
@@ -458,7 +434,7 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
 
     // 7. Return result
     if (batonMoved) {
-      return {
+      sendResponse(res, 200, {
         status: 'moved',
         message: `Baton moved: ${holderTeamName} → ${opponentTeam.name}`,
         batonMoved: true,
@@ -472,9 +448,9 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
           date: latestMatch.fixture.date
         },
         reason: reason
-      };
+      });
     } else {
-      return {
+      sendResponse(res, 200, {
         status: 'stayed',
         message: `Baton stayed with ${holderTeamName} (${outcomeForHolder.toLowerCase()})`,
         batonStayed: true,
@@ -487,20 +463,12 @@ exports.updateBaton = functions.https.onCall(async (data, context) => {
           date: latestMatch.fixture.date
         },
         reason: reason
-      };
+      });
     }
 
   } catch (error) {
     functions.logger.error('Error in updateBaton:', error);
-
-    if (error instanceof functions.https.HttpsError) {
-      throw error;
-    }
-
-    throw new functions.https.HttpsError(
-      'internal',
-      `Failed to update baton: ${error.message}`
-    );
+    sendError(res, 500, 'internal', `Failed to update baton: ${error.message}`);
   }
 });
 
@@ -517,9 +485,10 @@ exports.addFine = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { fine, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { fine } = req.body;
 
     if (!fine || typeof fine !== 'object') {
       return sendError(res, 400, 'invalid-argument', 'Fine object is required');
@@ -548,9 +517,10 @@ exports.deleteFine = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { fineId, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { fineId } = req.body;
 
     if (!fineId || typeof fineId !== 'string') {
       return sendError(res, 400, 'invalid-argument', 'Fine ID is required');
@@ -580,9 +550,10 @@ exports.updateFine = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { fineId, updates, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { fineId, updates } = req.body;
 
     if (!fineId || typeof fineId !== 'string') {
       return sendError(res, 400, 'invalid-argument', 'Fine ID is required');
@@ -614,9 +585,10 @@ exports.addBatonEntry = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { entry, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { entry } = req.body;
 
     if (!entry || typeof entry !== 'object') {
       return sendError(res, 400, 'invalid-argument', 'Entry object is required');
@@ -645,9 +617,10 @@ exports.deleteBatonEntry = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { entryId, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { entryId } = req.body;
 
     if (!entryId || typeof entryId !== 'string') {
       return sendError(res, 400, 'invalid-argument', 'Entry ID is required');
@@ -676,9 +649,10 @@ exports.saveTeam = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { team, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { team } = req.body;
 
     if (!team || typeof team !== 'object' || !team.teamId) {
       return sendError(res, 400, 'invalid-argument', 'Valid team object with teamId is required');
@@ -707,9 +681,10 @@ exports.setBatonHolder = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { holder, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { holder } = req.body;
 
     if (!holder || typeof holder !== 'object') {
       return sendError(res, 400, 'invalid-argument', 'Holder object is required');
@@ -738,9 +713,10 @@ exports.updatePlayers = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { players, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { players } = req.body;
 
     if (!Array.isArray(players)) {
       return sendError(res, 400, 'invalid-argument', 'Players must be an array');
@@ -769,9 +745,10 @@ exports.updateFineReasons = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { fineReasons, adminPassword } = req.body;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const { fineReasons } = req.body;
 
     if (!Array.isArray(fineReasons)) {
       return sendError(res, 400, 'invalid-argument', 'Fine reasons must be an array');
@@ -799,9 +776,8 @@ exports.deleteAllFines = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const { adminPassword } = req.body;
-
-    if (!validateAdminRequest(adminPassword, res)) return;
+    const user = await verifyAuth(req, res);
+    if (!user) return;
 
     functions.logger.info('Deleting all fines');
     const snapshot = await db.collection('fines').get();
@@ -860,6 +836,9 @@ exports.getProClubsMatches = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     const matchType = req.query.matchType || req.body?.matchType || 'leagueMatch';
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
@@ -944,6 +923,9 @@ exports.getProClubsSquad = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
     functions.logger.info(`Fetching Pro Clubs squad for club ${clubId}`);
@@ -995,6 +977,9 @@ exports.getProClubsInfo = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
     functions.logger.info(`Fetching Pro Clubs info for club ${clubId}`);
@@ -1155,6 +1140,9 @@ exports.logProClubsMatches = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     functions.logger.info('Manual match log triggered');
 
     const result = await fetchAndLogNewMatches();
@@ -1179,6 +1167,9 @@ exports.relogAllMatches = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifySuperAdmin(req, res);
+    if (!user) return;
+
     functions.logger.info('Clearing and re-logging all matches...');
 
     // Delete all existing logged matches
@@ -1214,6 +1205,9 @@ exports.getLoggedMatches = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     const limitParam = parseInt(req.query.limit) || 50;
 
     const snapshot = await db.collection('proClubsMatches')
@@ -1255,6 +1249,9 @@ exports.updateMatchAnyPlayer = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
     const { matchId, anyPlayer } = req.body.data || {};
 
     if (!matchId) {
@@ -1283,5 +1280,242 @@ exports.updateMatchAnyPlayer = functions.https.onRequest(async (req, res) => {
   } catch (error) {
     functions.logger.error('updateMatchAnyPlayer error:', error.message);
     sendError(res, 500, 'internal', `Failed to update match: ${error.message}`);
+  }
+});
+
+// ==============================================
+// USER AUTHENTICATION & PLAYER NAME FUNCTIONS
+// ==============================================
+
+/**
+ * Cloud Function: claimPlayerName
+ * Claims a player name for the authenticated user (with Firestore transaction)
+ */
+exports.claimPlayerName = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
+    const { playerName } = req.body;
+
+    if (!playerName || typeof playerName !== 'string' || playerName.trim().length === 0) {
+      return sendError(res, 400, 'invalid-argument', 'Player name is required');
+    }
+
+    await db.runTransaction(async (transaction) => {
+      // Check if name is already claimed
+      const claimRef = db.collection('playerNames').doc(playerName);
+      const claimDoc = await transaction.get(claimRef);
+
+      if (claimDoc.exists && claimDoc.data().uid !== user.uid) {
+        throw new Error('Name already claimed by another user');
+      }
+
+      // Check if user already has a different claim — release it
+      const userRef = db.collection('users').doc(user.uid);
+      const userDoc = await transaction.get(userRef);
+      if (userDoc.exists && userDoc.data().playerName && userDoc.data().playerName !== playerName) {
+        const oldClaimRef = db.collection('playerNames').doc(userDoc.data().playerName);
+        transaction.delete(oldClaimRef);
+      }
+
+      // Claim the name
+      transaction.set(claimRef, { uid: user.uid, claimedAt: new Date().toISOString() });
+      transaction.set(userRef, {
+        email: user.email || '',
+        displayName: user.name || user.email || '',
+        playerName: playerName,
+        photoURL: user.picture || '',
+        createdAt: (userDoc.exists && userDoc.data().createdAt) ? userDoc.data().createdAt : new Date().toISOString()
+      });
+    });
+
+    sendResponse(res, 200, { success: true });
+  } catch (error) {
+    functions.logger.error('Error in claimPlayerName:', error);
+    sendError(res, 400, 'already-claimed', error.message);
+  }
+});
+
+/**
+ * Cloud Function: updatePlayerMappings
+ * Updates the player name mappings in config (replaces direct client setDoc)
+ */
+exports.updatePlayerMappings = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
+    const { mappings } = req.body;
+    await db.collection('config').doc('playerMappings').set({ mappings });
+    sendResponse(res, 200, { success: true });
+  } catch (error) {
+    functions.logger.error('Error in updatePlayerMappings:', error);
+    sendError(res, 500, 'internal', `Failed to update mappings: ${error.message}`);
+  }
+});
+
+/**
+ * Cloud Function: checkSuperAdmin
+ * Returns whether the authenticated user is a super admin
+ */
+exports.checkSuperAdmin = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifyAuth(req, res);
+    if (!user) return;
+
+    sendResponse(res, 200, { isSuperAdmin: user.email === SUPER_ADMIN_EMAIL });
+  } catch (error) {
+    functions.logger.error('Error in checkSuperAdmin:', error);
+    sendError(res, 500, 'internal', error.message);
+  }
+});
+
+/**
+ * Cloud Function: reassignPlayerName
+ * Super admin: reassign a player name to a different user
+ */
+exports.reassignPlayerName = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifySuperAdmin(req, res);
+    if (!user) return;
+
+    const { targetUid, newPlayerName } = req.body;
+
+    if (!targetUid || !newPlayerName) {
+      return sendError(res, 400, 'invalid-argument', 'targetUid and newPlayerName are required');
+    }
+
+    await db.runTransaction(async (transaction) => {
+      const userRef = db.collection('users').doc(targetUid);
+      const userDoc = await transaction.get(userRef);
+
+      if (!userDoc.exists) {
+        throw new Error('User not found');
+      }
+
+      // Release old claim if exists
+      const oldName = userDoc.data().playerName;
+      if (oldName) {
+        transaction.delete(db.collection('playerNames').doc(oldName));
+      }
+
+      // Check new name availability
+      const newClaimRef = db.collection('playerNames').doc(newPlayerName);
+      const newClaimDoc = await transaction.get(newClaimRef);
+      if (newClaimDoc.exists && newClaimDoc.data().uid !== targetUid) {
+        throw new Error('Name already claimed by another user');
+      }
+
+      // Set new claim
+      transaction.set(newClaimRef, { uid: targetUid, claimedAt: new Date().toISOString() });
+      transaction.update(userRef, { playerName: newPlayerName });
+    });
+
+    sendResponse(res, 200, { success: true });
+  } catch (error) {
+    functions.logger.error('Error in reassignPlayerName:', error);
+    sendError(res, 400, 'failed', error.message);
+  }
+});
+
+/**
+ * Cloud Function: removeUserClaim
+ * Super admin: remove a user's player name claim
+ */
+exports.removeUserClaim = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifySuperAdmin(req, res);
+    if (!user) return;
+
+    const { targetUid } = req.body;
+
+    if (!targetUid) {
+      return sendError(res, 400, 'invalid-argument', 'targetUid is required');
+    }
+
+    await db.runTransaction(async (transaction) => {
+      const userRef = db.collection('users').doc(targetUid);
+      const userDoc = await transaction.get(userRef);
+
+      if (!userDoc.exists) {
+        throw new Error('User not found');
+      }
+
+      const playerName = userDoc.data().playerName;
+      if (playerName) {
+        transaction.delete(db.collection('playerNames').doc(playerName));
+      }
+      transaction.update(userRef, { playerName: null });
+    });
+
+    sendResponse(res, 200, { success: true });
+  } catch (error) {
+    functions.logger.error('Error in removeUserClaim:', error);
+    sendError(res, 500, 'internal', error.message);
+  }
+});
+
+/**
+ * Cloud Function: listAllUsers
+ * Super admin: list all registered users
+ */
+exports.listAllUsers = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifySuperAdmin(req, res);
+    if (!user) return;
+
+    const snapshot = await db.collection('users').get();
+    const users = [];
+    snapshot.forEach(doc => {
+      users.push({ uid: doc.id, ...doc.data() });
+    });
+
+    sendResponse(res, 200, { users });
+  } catch (error) {
+    functions.logger.error('Error in listAllUsers:', error);
+    sendError(res, 500, 'internal', error.message);
+  }
+});
+
+/**
+ * Cloud Function: resetAllClaims
+ * Super admin: clear all player name claims (everyone re-picks)
+ */
+exports.resetAllClaims = functions.https.onRequest(async (req, res) => {
+  if (handleCors(req, res)) return;
+
+  try {
+    const user = await verifySuperAdmin(req, res);
+    if (!user) return;
+
+    const batch = db.batch();
+
+    // Delete all playerNames docs
+    const claimsSnapshot = await db.collection('playerNames').get();
+    claimsSnapshot.forEach(doc => batch.delete(doc.ref));
+
+    // Clear playerName from all users
+    const usersSnapshot = await db.collection('users').get();
+    usersSnapshot.forEach(doc => batch.update(doc.ref, { playerName: null }));
+
+    await batch.commit();
+
+    sendResponse(res, 200, { success: true, clearedClaims: claimsSnapshot.size, clearedUsers: usersSnapshot.size });
+  } catch (error) {
+    functions.logger.error('Error in resetAllClaims:', error);
+    sendError(res, 500, 'internal', error.message);
   }
 });

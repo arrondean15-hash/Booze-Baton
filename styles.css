@@ -22,12 +22,391 @@
            APP SHELL & LAYOUT
            ===================================================== */
 
+        /* CSS-first approach: hide app until JS auth confirms login */
         .app-shell {
-            display: flex;
+            display: none;
             flex-direction: column;
             min-height: 100vh;
             max-width: 100%;
             position: relative;
+        }
+
+        .app-shell.authenticated {
+            display: flex;
+        }
+
+        /* =====================================================
+           LOGIN SCREEN
+           ===================================================== */
+
+        #loginScreen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #loginScreen.hidden {
+            display: none;
+        }
+
+        .login-logo {
+            width: 100px;
+            height: 100px;
+            border-radius: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .login-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            color: #FFCD00;
+            margin-bottom: 8px;
+            letter-spacing: -1px;
+        }
+
+        .login-subtitle {
+            font-size: 14px;
+            color: #A8BDE0;
+            margin-bottom: 40px;
+        }
+
+        .google-sign-in-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #FFFFFF;
+            color: #333;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .google-sign-in-btn:active {
+            transform: scale(0.97);
+        }
+
+        .google-sign-in-btn:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .google-sign-in-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .login-spinner {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .login-spinner.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .login-spinner .loader {
+            width: 40px;
+            height: 40px;
+        }
+
+        .login-spinner-text {
+            color: #A8BDE0;
+            font-size: 14px;
+        }
+
+        /* =====================================================
+           PLAYER PICKER MODAL
+           ===================================================== */
+
+        #playerPickerModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #playerPickerModal.active {
+            display: flex;
+        }
+
+        .picker-content {
+            background: #16307A;
+            border-radius: 16px;
+            padding: 30px 24px;
+            width: 90%;
+            max-width: 400px;
+            border: 2px solid #2E5AB0;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            animation: slideUp 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            text-align: center;
+        }
+
+        .picker-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            color: #FFCD00;
+            margin-bottom: 8px;
+        }
+
+        .picker-subtitle {
+            color: #A8BDE0;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+
+        .picker-select {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #2E5AB0;
+            border-radius: 10px;
+            font-size: 16px;
+            background: #0a1e4d;
+            color: #FFFFFF;
+            margin-bottom: 16px;
+        }
+
+        .picker-confirm-btn {
+            width: 100%;
+            background: #FFCD00;
+            color: #1D3C8D;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-family: 'Sora', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-bottom: 12px;
+        }
+
+        .picker-not-listed {
+            color: #7B9AD4;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .picker-not-listed:hover {
+            color: #FFCD00;
+        }
+
+        .picker-error {
+            color: #e74c3c;
+            font-size: 13px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        /* =====================================================
+           USER PROFILE (Header + Settings)
+           ===================================================== */
+
+        .user-profile-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #FFCD00;
+        }
+
+        .user-avatar-fallback {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #FFCD00;
+            color: #1D3C8D;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Sora', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            border: 2px solid #FFCD00;
+        }
+
+        .profile-card {
+            background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%);
+            border: 2px solid #2E5AB0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .profile-info-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .profile-avatar-large {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #FFCD00;
+        }
+
+        .profile-avatar-large-fallback {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #FFCD00;
+            color: #1D3C8D;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Sora', sans-serif;
+            font-weight: 700;
+            font-size: 28px;
+            border: 3px solid #FFCD00;
+        }
+
+        .profile-details {
+            flex: 1;
+        }
+
+        .profile-display-name {
+            font-family: 'Sora', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: #FFFFFF;
+        }
+
+        .profile-email {
+            font-size: 13px;
+            color: #A8BDE0;
+            margin-top: 2px;
+        }
+
+        .profile-player-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,205,0,0.15);
+            border: 1px solid rgba(255,205,0,0.3);
+            border-radius: 8px;
+            padding: 8px 14px;
+            margin-bottom: 12px;
+        }
+
+        .profile-player-name span {
+            color: #FFCD00;
+            font-weight: 600;
+        }
+
+        .profile-change-btn {
+            background: transparent;
+            border: 1px solid #7B9AD4;
+            color: #A8BDE0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .profile-change-btn:hover {
+            border-color: #FFCD00;
+            color: #FFCD00;
+        }
+
+        .sign-out-btn {
+            width: 100%;
+            background: transparent;
+            border: 2px solid #e74c3c;
+            color: #e74c3c;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Sora', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sign-out-btn:hover {
+            background: rgba(231,76,60,0.15);
+        }
+
+        /* =====================================================
+           SUPER ADMIN PANEL
+           ===================================================== */
+
+        .super-admin-panel {
+            display: none;
+            border: 2px solid #e74c3c;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%);
+        }
+
+        .super-admin-panel.visible {
+            display: block;
+        }
+
+        .super-admin-title {
+            color: #e74c3c;
+            font-family: 'Sora', sans-serif;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .super-admin-panel .btn {
+            margin-bottom: 8px;
+        }
+
+        /* =====================================================
+           VOTING AS DISPLAY (replaces voter dropdown)
+           ===================================================== */
+
+        .voting-as-display {
+            background: rgba(255,205,0,0.1);
+            border: 1px solid rgba(255,205,0,0.3);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .voting-as-display .label {
+            color: #A8BDE0;
+            font-size: 14px;
+        }
+
+        .voting-as-display .name {
+            color: #FFCD00;
+            font-weight: 700;
+            font-size: 16px;
         }
 
         .content {
