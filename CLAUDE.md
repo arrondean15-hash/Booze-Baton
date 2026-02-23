@@ -267,6 +267,50 @@ Leeds United-branded dark theme (completed Feb 2026 UI redesign):
 - **Layout**: 5-tab bottom nav (Home, Board, +, Vote, History) + 7 secondary screens via quick-nav
 - **Design mockups**: `/Users/arrondean/Desktop/App Colours Idea/`
 
+## Agent Playbooks
+
+When debugging or building features, spin up specialist sub-agents with the context below. Use the Task tool with `subagent_type: "general-purpose"` and include the relevant playbook in the prompt.
+
+### Backend Debugger
+> You are debugging a Firebase Cloud Functions backend in `/tmp/Booze-Baton/functions/index.js`. Key context:
+> - All 28 functions use `functions.https.onRequest` (Express-style `req, res`) — NOT `onCall`/`httpsCallable`
+> - Frontend calls them via raw `fetch` with `body: JSON.stringify(data)` — request data is always in `req.body`, NEVER `req.body.data`
+> - Auth: every function calls `verifyAuth(req, res)` which checks `Authorization: Bearer <idToken>` header
+> - CORS: custom `handleCors(req, res)` function (lines 69-88) — sets headers, handles OPTIONS preflight, does NOT modify `req.body`
+> - Responses: `sendResponse(res, status, data)` and `sendError(res, status, code, message)` helpers
+> - Firestore: `admin.firestore()` via `db` variable, collections include: fines, batonHistory, dailyVotes, users, playerNames, config, proClubsMatches, known_teams
+> - Check the "Common Gotchas & Past Bugs" table in CLAUDE.md for known patterns
+
+### Frontend Debugger
+> You are debugging a vanilla JS single-page app in `/tmp/Booze-Baton/app.js` (~227KB) with `/tmp/Booze-Baton/styles.css` and `/tmp/Booze-Baton/index.html`. Key context:
+> - No framework — plain JS with ES modules (`type="module"` in script tag)
+> - All Cloud Function calls go through `callFunction(functionName, data)` helper (~line 27) which uses raw `fetch` with JSON body + Bearer token
+> - Inline `onclick`/`onchange` handlers in HTML require functions to be exposed via `window.functionName = functionName`
+> - Toast notifications use `showToast(message, type)` — NOT `showNotification()` (old name, doesn't exist)
+> - 5 main tabs (Home, Board, +, Vote, History) + 7 secondary screens navigated via `showScreen(screenName)`
+> - Leeds United dark theme — colours defined in CSS variables
+> - Version info at lines 16-17: `APP_VERSION` and `LAST_UPDATED`
+
+### Deploy & Test Agent
+> You are responsible for testing and deploying the Booze Baton app from `/tmp/Booze-Baton`. Key context:
+> - MUST test locally before any deploy: `firebase serve --only hosting --port 5050 --project booze-baton`
+> - For functions: `firebase emulators:start --only functions --project booze-baton`
+> - Firebase project ID: `booze-baton` — always use `--project booze-baton` flag when deploying from `/tmp/`
+> - Deploy hosting: `firebase deploy --only hosting --project booze-baton`
+> - Deploy functions: `cd functions && npm install && cd .. && firebase deploy --only functions --project booze-baton`
+> - Deploy everything: `firebase deploy --project booze-baton`
+> - After deploy, verify the live app at https://booze-baton.web.app
+> - If something breaks, the previous version is the last commit on GitHub — `git revert HEAD` and redeploy
+
+### Firestore Auditor
+> You are auditing Firestore data and security for the Booze Baton app. Key context:
+> - Project: `booze-baton`, rules in `/tmp/Booze-Baton/firestore.rules`
+> - Collections: `fines`, `batonHistory`, `dailyVotes/{date}`, `users/{uid}`, `playerNames/{name}`, `config`, `proClubsMatches`, `known_teams`
+> - Security model: all reads require auth (`request.auth != null`), client writes blocked except `dailyVotes` (auth read/write) and `users/{userId}` (own-doc write)
+> - All other writes go through Cloud Functions using Admin SDK (bypasses rules)
+> - `playerNames` enforces uniqueness via Firestore transaction in `claimPlayerName` function
+> - Super admin operations (reassign, remove claims, list users) check email against `functions.config().superadmin.email`
+
 ## Important Notes
 
 - **ALWAYS clone from GitHub** (`gh repo clone arrondean15-hash/Booze-Baton`) into `/tmp/` at the start of each session. Never read or edit files from `~/Desktop/` — those are stale local clones and not the source of truth. GitHub is always the latest.
