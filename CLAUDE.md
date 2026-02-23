@@ -313,6 +313,7 @@ Pencil mockups created in VS Code Pencil extension. Reference images saved in:
 - [ ] Merge to main (currently deployed from `ui-redesign` branch)
 
 ### Important Notes
+- **ALWAYS clone from GitHub** (`gh repo clone arrondean15-hash/Booze-Baton`) into `/tmp/` at the start of each session. Never read or edit files from `~/Desktop/` — those are stale local clones and not the source of truth. GitHub is always the latest.
 - All users authenticate via Google Sign-In before accessing any app functionality
 - All Cloud Functions require Firebase Auth token (no more PIN)
 - Super admin email set via `firebase functions:config:set superadmin.email="..."`
