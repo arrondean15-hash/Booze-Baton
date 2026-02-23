@@ -42,7 +42,7 @@ Fetches match data from EA's Pro Clubs API for club ID `21853` (Benidorm United)
 
 ## Cloud Functions
 
-Located in `functions/index.js`. All functions require Firebase Auth token verification (Bearer token in Authorization header).
+Located in `functions/index.js`. All functions use `functions.https.onRequest` (Express-style `req, res`) — **NOT** `onCall`/`httpsCallable`. The frontend calls them via a raw `fetch` helper `callFunction()` (app.js ~line 27) which sends JSON directly as `req.body` with a Bearer token in the Authorization header.
 
 **Authenticated Functions** (onRequest with CORS + token auth):
 - `addFine` - Add a new fine
@@ -239,85 +239,42 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 - **Feb 2026**: Extracted base64 logo to separate `logo.png` file (reduced index.html from 273KB to 42KB)
 - **Jan 2026**: v2.9.0 - EA Pro Clubs integration, match logging, ANY player tracking
 
+## Common Gotchas & Past Bugs
+
+These patterns have caused real bugs — check for them when debugging:
+
+| Pattern | What went wrong | Fix |
+|---------|----------------|-----|
+| `req.body.data` in Cloud Functions | `updateMatchAnyPlayer` read `req.body.data` instead of `req.body`, silently failing every call (23 Feb 2026) | All functions use `onRequest` + raw `fetch` — body is always `req.body`, never `req.body.data` |
+| `onCall` vs `onRequest` mismatch | Admin functions were `onCall` but frontend used raw `fetch` (v2.10.1) | Converted all to `onRequest` — do NOT use `onCall` in this project |
+| `showNotification()` doesn't exist | Old function name referenced in match ANY player update | Use `showToast()` instead |
+| `Alert.alert` on web | React Native pattern doesn't work in browser | Use `window.alert` on web |
+| Port 5000 taken on macOS | ControlCenter occupies port 5000 | Use `firebase serve --port 5050` |
+| ES module + inline handlers | `onclick` in HTML can't see module-scoped functions | Must expose via `window.functionName` |
+
 ## Known Deprecations
 
-- **Node.js 20**: Deprecated April 2026, decommissioned October 2026 - upgrade to Node.js 22
-- **functions.config()**: Deprecated March 2026 - migrate to params package
+- **Node.js 20**: Deprecated April 2026, decommissioned October 2026 — upgrade to Node.js 22
+- **functions.config()**: Deprecated March 2026 — migrate to params package
 
----
+## Design System
 
-## UI Redesign (Branch: `ui-redesign`)
+Leeds United-branded dark theme (completed Feb 2026 UI redesign):
 
-### Overview
-Full visual overhaul to a Leeds United-branded mobile-first design. Backend (Cloud Functions, Firestore) stays completely untouched. Only frontend files change: `styles.css`, `index.html`, and DOM references in `app.js`.
+- **Colours**: Primary `#1D3C8D`, cards `#16307A`, tab bar `#152C6B`, accent `#FFCD00`, borders `#2E5AB0`
+- **Typography**: Headlines Sora (bold), body Inter, fallback system fonts
+- **Background**: Elland Road stadium with `#1D3C8DA6` overlay (~65% opacity)
+- **Layout**: 5-tab bottom nav (Home, Board, +, Vote, History) + 7 secondary screens via quick-nav
+- **Design mockups**: `/Users/arrondean/Desktop/App Colours Idea/`
 
-### Design Reference
-Pencil mockups created in VS Code Pencil extension. Reference images saved in:
-`/Users/arrondean/Desktop/App Colours Idea/`
+## Important Notes
 
-### Design System
-
-**Colours (Official Leeds United palette):**
-- Primary background: `#1D3C8D` (Royal blue)
-- Card surfaces: `#16307A` (Darker blue)
-- Tab bar: `#152C6B` (Darkest blue)
-- Accent/CTA: `#FFCD00` (Leeds gold)
-- Borders/strokes: `#2E5AB0`
-- Primary text: `#FFFFFF`
-- Secondary text: `#A8BDE0`
-- Muted text: `#7B9AD4`
-
-**Typography:**
-- Headlines: Sora (bold)
-- Body/UI: Inter
-- Fallback: system fonts
-
-**Background:**
-- Elland Road stadium image merged behind content with semi-transparent blue overlay (`#1D3C8DA6` ~65% opacity)
-
-### Screens Designed (5 iPhone screens, 393×852px)
-1. **Home** - Greeting, Elland Road banner, stat cards (Total Pot, Unpaid, Players), Baton Holder card, Recent Fines
-2. **Leaderboard** - "Hall of Shame", segmented tabs (Worst/Improved/Clean), podium top 3, full rankings
-3. **Voting** - Daily Vote with LIVE badge, Best/Worst player radio selections, Submit button
-4. **History** - Search bar, filter chips (All/Unpaid/Paid/This Week), date-grouped fine entries with status badges
-5. **Log Fine** - Modal-style form (Player, Reason, Amount, Date, Notes), Quick Fine shortcuts
-
-### Tab Bar Pattern
-- 5 tabs: Home, Board, + (raised gold circle), Vote, History
-- The "+" opens Log Fine as a modal overlay
-- Active tab highlighted in gold
-
-### Mapping: New Screens → Existing Tabs
-| New Screen | Old Tab(s) | Notes |
-|-----------|-----------|-------|
-| Home | Stats + Baton | Combined into dashboard |
-| Leaderboard | Stats/Charts | Redesigned as "Hall of Shame" |
-| Voting | Voting | Same functionality, new look |
-| History | History | Same functionality, new look |
-| Log Fine | Add | Redesigned as modal |
-| TBD | Players, Manage, Settings, Spakka, Matches | Need to design these screens |
-
-### Progress Tracker
-- [x] Create `ui-redesign` branch
-- [x] Update CLAUDE.md with redesign context
-- [x] Phase 1: CSS restyle (colours, typography, card styles)
-- [x] Phase 2: HTML restructure (mobile-first layout, tab bar)
-- [x] Phase 3: app.js DOM reference updates
-- [x] Phase 4: All screens implemented (Players, Manage, Settings, Matches, Spakka, Baton, Charts, Stats)
-- [x] Phase 5: Local testing with `firebase serve`
-- [x] Phase 6: Deployed to Firebase Hosting
-- [x] Feature parity audit (3 parallel agents - all 36+ missing IDs restored)
-- [x] History filter bug fix (off-by-one from checkbox column)
-- [x] UX fixes (homepage default, auto-unlock, table overflow, removed unused chart)
-- [x] Troubleshooting audit (JS errors, CSS issues, dead code cleanup)
-- [ ] Merge to main (currently deployed from `ui-redesign` branch)
-
-### Important Notes
 - **ALWAYS clone from GitHub** (`gh repo clone arrondean15-hash/Booze-Baton`) into `/tmp/` at the start of each session. Never read or edit files from `~/Desktop/` — those are stale local clones and not the source of truth. GitHub is always the latest.
+- **Live app**: https://booze-baton.web.app
+- **Firebase project**: `booze-baton` (use `--project booze-baton` when deploying from `/tmp/`)
 - All users authenticate via Google Sign-In before accessing any app functionality
 - All Cloud Functions require Firebase Auth token (no more PIN)
 - Super admin email set via `firebase functions:config:set superadmin.email="..."`
-- Test with `firebase serve --only hosting --port 5050` before any deploy (port 5000 taken by macOS ControlCenter)
+- Test with `firebase serve --only hosting --port 5050` before any deploy
 - Deploy all services together (`firebase deploy`) — auth code and Firestore rules must deploy simultaneously
-- 5 main tabs + 7 secondary screens accessible via quick-nav and navigation buttons
-- ES module (`type="module"`) - inline onclick handlers need `window.functionName` exposure
+- ES module (`type="module"`) — inline onclick handlers need `window.functionName` exposure
