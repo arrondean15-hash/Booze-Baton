@@ -175,6 +175,10 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **23 Feb 2026**:
+  - Bugfix: `updateMatchAnyPlayer` Cloud Function was reading `req.body.data` instead of `req.body`, causing every ANY player assignment to fail with "matchId is required"
+  - Added failsafe (`req.body.data || req.body`) so the function works with both raw and data-wrapped request bodies
+  - Deployed updated Cloud Functions to production
 - **21 Feb 2026**:
   - v3.0.0: Google Sign-In & User Authentication
     - Added Firebase Auth with Google Sign-In (popup + redirect fallback)
