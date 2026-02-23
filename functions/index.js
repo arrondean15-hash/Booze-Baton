@@ -1252,7 +1252,9 @@ exports.updateMatchAnyPlayer = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
-    const { matchId, anyPlayer } = req.body.data || {};
+    // Failsafe: support both raw body and data-wrapped body (e.g. Firebase callable style)
+    const body = req.body.data || req.body;
+    const { matchId, anyPlayer } = body;
 
     if (!matchId) {
       return sendError(res, 400, 'invalid-argument', 'matchId is required');
