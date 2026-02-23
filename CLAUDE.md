@@ -270,11 +270,11 @@ Leeds United-branded dark theme (completed Feb 2026 UI redesign):
 ## Important Notes
 
 - **ALWAYS clone from GitHub** (`gh repo clone arrondean15-hash/Booze-Baton`) into `/tmp/` at the start of each session. Never read or edit files from `~/Desktop/` — those are stale local clones and not the source of truth. GitHub is always the latest.
+- **ALWAYS test before committing/deploying.** After making changes, run `firebase serve --only hosting --port 5050 --project booze-baton` from the `/tmp/Booze-Baton` directory and verify the affected feature works at `http://localhost:5050` before pushing to GitHub or deploying to production. For Cloud Functions changes, use `firebase emulators:start --only functions --project booze-baton` to test locally first. Never push untested code — if something breaks in production, rolling back is painful.
 - **Live app**: https://booze-baton.web.app
 - **Firebase project**: `booze-baton` (use `--project booze-baton` when deploying from `/tmp/`)
 - All users authenticate via Google Sign-In before accessing any app functionality
 - All Cloud Functions require Firebase Auth token (no more PIN)
 - Super admin email set via `firebase functions:config:set superadmin.email="..."`
-- Test with `firebase serve --only hosting --port 5050` before any deploy
 - Deploy all services together (`firebase deploy`) — auth code and Firestore rules must deploy simultaneously
 - ES module (`type="module"`) — inline onclick handlers need `window.functionName` exposure
