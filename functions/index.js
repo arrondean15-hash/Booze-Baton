@@ -1036,7 +1036,7 @@ async function fetchAndLogNewMatches() {
         platform: EA_PLATFORM,
         clubIds: clubId,
         matchType: matchType,
-        maxResultCount: 10
+        maxResultCount: 50
       });
 
       if (data && Array.isArray(data) && data.length > 0) {
@@ -1228,11 +1228,8 @@ exports.getLoggedMatches = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
-    const limitParam = parseInt(req.query.limit) || 50;
-
     const snapshot = await db.collection('proClubsMatches')
       .orderBy('timestamp', 'desc')
-      .limit(limitParam)
       .get();
 
     const matches = [];
@@ -1240,6 +1237,7 @@ exports.getLoggedMatches = functions.https.onRequest(async (req, res) => {
       const data = doc.data();
       matches.push({
         matchId: data.matchId,
+        matchType: data.matchType || 'leagueMatch',
         timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null,
         result: data.result,
         ourScore: data.ourScore,

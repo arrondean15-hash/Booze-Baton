@@ -5187,7 +5187,7 @@
         // Load logged match history from Firestore
         async function loadLoggedMatches() {
             try {
-                const data = await callFunctionGet('getLoggedMatches', { limit: 100 });
+                const data = await callFunctionGet('getLoggedMatches');
 
                 if (data.data) {
                     loggedMatchesCache = data.data;
