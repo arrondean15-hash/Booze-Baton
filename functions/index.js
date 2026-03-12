@@ -1026,24 +1026,43 @@ exports.getProClubsInfo = functions.https.onRequest(async (req, res) => {
  */
 async function fetchAndLogNewMatches() {
   const clubId = EA_CLUB_ID;
+  const matchTypes = ['leagueMatch', 'playoffMatch', 'friendlyMatch'];
 
-  // Fetch latest matches from EA
-  const data = await callEaProClubsAPI('clubs/matches', {
-    platform: EA_PLATFORM,
-    clubIds: clubId,
-    matchType: 'leagueMatch',
-    maxResultCount: 10
-  });
+  // Fetch latest matches from EA across all match types
+  let allMatches = [];
+  for (const matchType of matchTypes) {
+    try {
+      const data = await callEaProClubsAPI('clubs/matches', {
+        platform: EA_PLATFORM,
+        clubIds: clubId,
+        matchType: matchType,
+        maxResultCount: 10
+      });
 
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    functions.logger.info('No matches returned from EA API');
+      if (data && Array.isArray(data) && data.length > 0) {
+        // Tag each match with its type
+        for (const match of data) {
+          match._matchType = matchType;
+        }
+        allMatches = allMatches.concat(data);
+        functions.logger.info(`Fetched ${data.length} ${matchType} matches from EA API`);
+      } else {
+        functions.logger.info(`No ${matchType} matches returned from EA API`);
+      }
+    } catch (error) {
+      functions.logger.warn(`Failed to fetch ${matchType} matches: ${error.message}`);
+    }
+  }
+
+  if (allMatches.length === 0) {
+    functions.logger.info('No matches returned from EA API across all match types');
     return { logged: 0, skipped: 0 };
   }
 
   let logged = 0;
   let skipped = 0;
 
-  for (const match of data) {
+  for (const match of allMatches) {
     const matchId = match.matchId;
 
     // Check if match already exists in Firestore
@@ -1096,6 +1115,7 @@ async function fetchAndLogNewMatches() {
     // Save to Firestore
     await db.collection('proClubsMatches').doc(matchId).set({
       matchId,
+      matchType: match._matchType || 'leagueMatch',
       timestamp: match.timestamp ? new Date(parseInt(match.timestamp) * 1000) : null,
       result,
       ourScore,
