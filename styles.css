@@ -1488,6 +1488,8 @@
             100% { transform: rotate(360deg); }
         }
 
+        .spinning i { animation: spin 0.8s linear infinite; }
+
         .loading-overlay {
             position: fixed;
             top: 0;

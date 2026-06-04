@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.0.0';
-        const LAST_UPDATED = '21 Feb 2026';
+        const APP_VERSION = 'v3.0.1';
+        const LAST_UPDATED = '19 Apr 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -2403,6 +2403,35 @@
                 showToast(`History refreshed: ${cachedFullFines.length} fines loaded`, 'success');
             }
         }
+
+        // HEADER REFRESH — refreshes both fines history and logged matches
+        async function refreshAllData() {
+            const headerBtn = document.getElementById('headerRefreshBtn');
+            if (headerBtn) {
+                headerBtn.disabled = true;
+                headerBtn.classList.add('spinning');
+            }
+
+            // Clear selection before refresh
+            selectedFineIds.clear();
+            updateBulkActionBar();
+
+            const [finesOk] = await Promise.all([
+                fetchFullHistory(),
+                loadLoggedMatches()
+            ]);
+
+            if (headerBtn) {
+                headerBtn.disabled = false;
+                headerBtn.classList.remove('spinning');
+            }
+
+            if (finesOk) {
+                const matchCount = loggedMatchesCache?.matches?.length || 0;
+                showToast(`Refreshed: ${cachedFullFines.length} fines, ${matchCount} matches`, 'success');
+            }
+        }
+        window.refreshAllData = refreshAllData;
 
         function updateHistory() {
             const historyContent = document.getElementById('historyContent');
