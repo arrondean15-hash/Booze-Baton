@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.0.1';
-        const LAST_UPDATED = '19 Apr 2026';
+        const APP_VERSION = 'v3.0.2';
+        const LAST_UPDATED = '07 Jun 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -410,6 +410,13 @@
                     superAdminPanel.classList.remove('visible');
                 }
             }
+
+            // Destructive data controls (replace-all import, clear all fines) — super admin only.
+            // Backend also enforces this (deleteAllFines uses verifySuperAdmin); this just hides dead buttons.
+            const adminReplaceImport = document.getElementById('adminReplaceImportGroup');
+            if (adminReplaceImport) adminReplaceImport.style.display = isSuperAdmin ? '' : 'none';
+            const clearAllFinesBtn = document.getElementById('clearAllFinesBtn');
+            if (clearAllFinesBtn) clearAllFinesBtn.style.display = isSuperAdmin ? '' : 'none';
 
             // Vote admin section - always visible for logged-in users
             const voteAdminSection = document.getElementById('voteAdminSection');

@@ -58,7 +58,13 @@ async function verifyAuth(req, res) {
 async function verifySuperAdmin(req, res) {
   const user = await verifyAuth(req, res);
   if (!user) return null;
-  if (user.email !== SUPER_ADMIN_EMAIL) {
+  // Fail closed if super admin is not configured — never let an undefined
+  // SUPER_ADMIN_EMAIL match an undefined user.email (undefined !== undefined === false).
+  if (!SUPER_ADMIN_EMAIL) {
+    sendError(res, 503, 'misconfigured', 'Super admin not configured');
+    return null;
+  }
+  if (!user.email || user.email !== SUPER_ADMIN_EMAIL) {
     sendError(res, 403, 'permission-denied', 'Super admin access required');
     return null;
   }
@@ -776,7 +782,8 @@ exports.deleteAllFines = functions.https.onRequest(async (req, res) => {
   if (handleCors(req, res)) return;
 
   try {
-    const user = await verifyAuth(req, res);
+    // Destructive: wipes the entire fines ledger. Super admin only.
+    const user = await verifySuperAdmin(req, res);
     if (!user) return;
 
     functions.logger.info('Deleting all fines');

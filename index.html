@@ -813,15 +813,19 @@
                     <label for="fileInput" class="btn btn-secondary" style="cursor: pointer; display: block; text-align: center;">
                         Import CSV (Add to Existing Data)
                     </label>
-                    <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
-                    <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
-                        Import CSV (Replace All Data)
-                    </label>
-                    <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
-                        "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
+                    <!-- Destructive: replace-all import. Super admin only (toggled in updateProfileUI). -->
+                    <div id="adminReplaceImportGroup" style="display: none;">
+                        <input type="file" id="fileInputReplace" accept=".csv" onchange="handleFileSelect(event, true)" style="display: none;">
+                        <label for="fileInputReplace" class="btn" style="cursor: pointer; display: block; text-align: center; background: #e67e22; color: white;">
+                            Import CSV (Replace All Data)
+                        </label>
+                        <div class="info-text" style="margin-top: 5px; margin-bottom: 15px;">
+                            "Add to Existing" will append new fines. "Replace All" will delete all current fines first.
+                        </div>
                     </div>
                     <button class="btn btn-success" onclick="markAllPaidSettings()">Mark All as Paid</button>
-                    <button class="btn btn-danger" onclick="clearAllFines()">Clear All Fines</button>
+                    <!-- Destructive: wipes all fines. Super admin only (toggled in updateProfileUI). -->
+                    <button id="clearAllFinesBtn" class="btn btn-danger" onclick="clearAllFines()" style="display: none;">Clear All Fines</button>
                 </div>
 
                 <div id="importAlert"></div>
