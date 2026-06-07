@@ -29,3 +29,7 @@ Thumbs.db
 # Environment (if any)
 .env
 .env.local
+
+# Python (local tools/)
+__pycache__/
+*.pyc
