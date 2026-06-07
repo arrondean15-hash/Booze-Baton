@@ -175,6 +175,14 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **07 Jun 2026**:
+  - v3.0.2: Security hardening from a full app review (audit findings below)
+    - **P1 fix**: `deleteAllFines` Cloud Function now requires `verifySuperAdmin` (was `verifyAuth`) — previously ANY authenticated player could call it and wipe the entire fines ledger (client writes are blocked by rules, so this function was the only delete path and it was unguarded). `functions/index.js:783`
+    - **P1 fix**: `verifySuperAdmin` now fails closed — returns 503 if `SUPER_ADMIN_EMAIL` is unset, and rejects tokens with no `email` claim. Closes the `undefined !== undefined === false` bypass where an unconfigured admin email could grant super-admin to an email-less token. `functions/index.js:58`
+    - **Frontend**: "Clear All Fines" (`#clearAllFinesBtn`) and "Import CSV (Replace All Data)" (`#adminReplaceImportGroup`) are now hidden unless `isSuperAdmin`, toggled in `updateProfileUI()` alongside the super-admin panel. Non-destructive "Import CSV (Add to Existing)" and "Mark All as Paid" remain visible to all users.
+    - Both changes reviewed by `security-reviewer` + `booze-reviewer` (verdict SHIP), tested on `:5050` (0 console errors), functions + hosting deployed to production, committed to `main` (`53681ed`).
+    - **Outstanding audit items (P2, not yet fixed)**: (1) `firestore.rules` lets any authed user overwrite the whole `dailyVotes/{date}` map — a user can tamper with others' votes; (2) `submitVote`/`saveVoteEdit`/`deleteVote` read the ENTIRE `dailyVotes` collection then `.find()` today's doc instead of `getDoc(doc(db,'dailyVotes',date))` — full-scan that grows forever; (3) EA Pro Clubs `fetch` uses `timeout: 10000` which undici ignores — should be `AbortSignal.timeout()`; (4) catch blocks echo raw `error.message` to clients, leaking internals; (5) vote functions have no double-submit guard.
+  - **Note**: v3.0.1 (dated 19 Apr 2026 in `app.js`) shipped but was never recorded in this changelog — its contents are not documented here.
 - **23 Feb 2026**:
   - Bugfix: `updateMatchAnyPlayer` Cloud Function was reading `req.body.data` instead of `req.body`, causing every ANY player assignment to fail with "matchId is required"
   - Added failsafe (`req.body.data || req.body`) so the function works with both raw and data-wrapped request bodies
@@ -247,6 +255,8 @@ These patterns have caused real bugs — check for them when debugging:
 |---------|----------------|-----|
 | `req.body.data` in Cloud Functions | `updateMatchAnyPlayer` read `req.body.data` instead of `req.body`, silently failing every call (23 Feb 2026) | All functions use `onRequest` + raw `fetch` — body is always `req.body`, never `req.body.data` |
 | `onCall` vs `onRequest` mismatch | Admin functions were `onCall` but frontend used raw `fetch` (v2.10.1) | Converted all to `onRequest` — do NOT use `onCall` in this project |
+| Destructive function gated by `verifyAuth` only | `deleteAllFines` used `verifyAuth`, so any authenticated player could wipe all fines (v3.0.2) | Destructive/admin-wide ops must use `verifySuperAdmin`, AND hide their UI controls behind `isSuperAdmin` |
+| `verifySuperAdmin` open when email unset | If `SUPER_ADMIN_EMAIL` is undefined, `undefined !== undefined` is `false` → check passes (v3.0.2) | `verifySuperAdmin` now fails closed (503) when unset and rejects tokens with no `email` |
 | `showNotification()` doesn't exist | Old function name referenced in match ANY player update | Use `showToast()` instead |
 | `Alert.alert` on web | React Native pattern doesn't work in browser | Use `window.alert` on web |
 | Port 5000 taken on macOS | ControlCenter occupies port 5000 | Use `firebase serve --port 5050` |
