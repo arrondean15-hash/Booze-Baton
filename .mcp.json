@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "firebase-tools@latest",
+        "experimental:mcp",
+        "--dir",
+        "/Users/arrondean/Documents/Claude/Projects/booze-baton-app"
+      ],
+      "env": {}
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "env": {}
+    }
+  }
+}
