@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.0.2';
-        const LAST_UPDATED = '07 Jun 2026';
+        const APP_VERSION = 'v3.1.0';
+        const LAST_UPDATED = '08 Jun 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -1832,6 +1832,16 @@
             if (tabName === 'baton') {
                 updateMatchFormHolder();
             }
+
+            // Auto-load full fine history the first time the History tab is opened
+            if (tabName === 'history' && cachedFullFines.length === 0) {
+                autoLoadHistory();
+            }
+        }
+
+        async function autoLoadHistory() {
+            if (cachedFullFines.length > 0) return; // already loaded — don't re-hit Firestore
+            await fetchFullHistory(); // populates cache + renders silently (toasts only on error)
         }
 
         function updateAll() {
@@ -2403,7 +2413,7 @@
 
             if (refreshBtn) {
                 refreshBtn.disabled = false;
-                refreshBtn.textContent = '🔄 Refresh History';
+                refreshBtn.textContent = '🔄 Refresh';
             }
 
             if (success) {
@@ -2446,15 +2456,19 @@
             // Use cachedFullFines (from manual refresh) instead of allFines (realtime limited data)
             const finesData = cachedFullFines.length > 0 ? cachedFullFines : [];
 
+            const historyToolbar = document.getElementById('historyToolbar');
             if (finesData.length === 0) {
+                if (historyToolbar) historyToolbar.style.display = 'none';
                 historyContent.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📝</div>
-                        <p>History not loaded yet</p>
-                        <p style="font-size: 0.9em; color: #A8BDE0; margin-top: 10px;">Click "Refresh History" button above to load all fines</p>
+                        <p>Loading history…</p>
+                        <p style="font-size: 0.9em; color: #A8BDE0; margin-top: 10px;">If it doesn't appear automatically, tap below.</p>
+                        <button class="btn btn-small btn-secondary" style="margin-top: 12px;" onclick="refreshHistory()">🔄 Refresh History</button>
                     </div>`;
                 return;
             }
+            if (historyToolbar) historyToolbar.style.display = 'flex';
 
             // Sort by date descending (most recent first)
             const sortedFines = [...finesData].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -2475,8 +2489,8 @@
                         </thead>
                         <tbody>
                             ${sortedFines.map(fine => `
-                                <tr data-fine-id="${fine.id}" data-full-reason="${fine.reason}">
-                                    <td><input type="checkbox" class="fine-checkbox" data-id="${fine.id}" onchange="toggleFineSelection('${fine.id}')" ${selectedFineIds.has(fine.id) ? 'checked' : ''}></td>
+                                <tr class="fine-row${selectedFineIds.has(fine.id) ? ' row-selected' : ''}" data-fine-id="${fine.id}" data-full-reason="${fine.reason}" data-paid="${fine.paid}" onclick="toggleRowSelection(event, '${fine.id}')">
+                                    <td><input type="checkbox" class="fine-checkbox" data-id="${fine.id}" style="pointer-events: none;" ${selectedFineIds.has(fine.id) ? 'checked' : ''}></td>
                                     <td>${formatDateDDMMYYYY(fine.date)}</td>
                                     <td>${fine.playerName}</td>
                                     <td style="font-size: 0.85em;">${fine.reason.substring(0, 30)}${fine.reason.length > 30 ? '...' : ''}</td>
@@ -2487,10 +2501,10 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="btn-small ${fine.paid ? 'btn-secondary' : 'btn-success'}" onclick="togglePaid('${fine.id}', ${!fine.paid})">
+                                        <button class="btn-small row-action ${fine.paid ? 'btn-secondary' : 'btn-success'}" onclick="togglePaid('${fine.id}', ${!fine.paid})">
                                             ${fine.paid ? 'Unpaid' : 'Paid'}
                                         </button>
-                                        <button class="btn-small btn-danger" onclick="deleteFine('${fine.id}')">Del</button>
+                                        <button class="btn-small row-action btn-danger" onclick="deleteFine('${fine.id}')">Del</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -2899,6 +2913,7 @@
                     selectedFineIds.delete(fineId);
                     cb.checked = false;
                 }
+                cb.closest('tr')?.classList.toggle('row-selected', checked);
             });
             updateBulkActionBar();
         }
@@ -2922,14 +2937,101 @@
 
             const count = selectedFineIds.size;
             countSpan.textContent = count;
-            bar.style.display = count > 0 ? 'block' : 'none';
+
+            // Selected GBP total (from the full history dataset)
+            const totalSpan = document.getElementById('selectedTotal');
+            if (totalSpan) {
+                let sum = 0;
+                cachedFullFines.forEach(f => { if (selectedFineIds.has(f.id)) sum += (f.amount || 0); });
+                totalSpan.textContent = `£${sum.toFixed(2)}`;
+            }
+
+            bar.style.display = count > 0 ? 'flex' : 'none';
         }
+
+        // Re-sync row highlights + checkboxes from selectedFineIds (after bulk selects)
+        function syncRowHighlights() {
+            document.querySelectorAll('#historyContent tbody tr').forEach(row => {
+                const cb = row.querySelector('.fine-checkbox');
+                const id = cb && cb.dataset.id;
+                const sel = !!(id && selectedFineIds.has(id));
+                row.classList.toggle('row-selected', sel);
+                if (cb) cb.checked = sel;
+            });
+        }
+
+        // Tap anywhere on a row (except action buttons) to toggle its selection
+        function toggleRowSelection(event, fineId) {
+            if (event.target.closest('.row-action')) return; // let Paid/Del buttons act
+            const sel = !selectedFineIds.has(fineId);
+            if (sel) selectedFineIds.add(fineId); else selectedFineIds.delete(fineId);
+            const row = event.currentTarget;
+            row.classList.toggle('row-selected', sel);
+            const cb = row.querySelector('.fine-checkbox');
+            if (cb) cb.checked = sel;
+            updateBulkActionBar();
+            updateSelectAllCheckbox();
+        }
+        window.toggleRowSelection = toggleRowSelection;
+
+        // Quick-select chips
+        function selectAllVisible() {
+            toggleSelectAll(true);
+            const selectAllCb = document.getElementById('selectAllFines');
+            if (selectAllCb) selectAllCb.checked = true;
+            syncRowHighlights();
+        }
+        window.selectAllVisible = selectAllVisible;
+
+        function selectUnpaidVisible() {
+            selectedFineIds.clear();
+            document.querySelectorAll('#historyContent tbody tr:not([style*="display: none"])').forEach(row => {
+                if (row.dataset.paid === 'false') {
+                    const id = row.querySelector('.fine-checkbox')?.dataset.id;
+                    if (id) selectedFineIds.add(id);
+                }
+            });
+            syncRowHighlights();
+            updateBulkActionBar();
+            updateSelectAllCheckbox();
+        }
+        window.selectUnpaidVisible = selectUnpaidVisible;
+
+        // Bulk delete selected fines (single "are you sure?" confirm)
+        async function bulkDelete() {
+            if (selectedFineIds.size === 0) {
+                showToast('No fines selected', 'error');
+                return;
+            }
+            const ids = Array.from(selectedFineIds);
+            if (!confirm(`Delete ${ids.length} fine${ids.length === 1 ? '' : 's'}? Are you sure? This cannot be undone.`)) {
+                return;
+            }
+            try {
+                showLoading(`Deleting ${ids.length} fines...`);
+                for (const id of ids) {
+                    await callFunction('deleteFine', { fineId: id });
+                }
+                clearSelection();
+                hideLoading();
+                showToast(`${ids.length} fine${ids.length === 1 ? '' : 's'} deleted`, 'success');
+                await refreshHistory();
+            } catch (error) {
+                hideLoading();
+                showToast('Failed to delete some fines', 'error');
+            }
+        }
+        window.bulkDelete = bulkDelete;
 
         function clearSelection() {
             selectedFineIds.clear();
             document.querySelectorAll('.fine-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('#historyContent tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
             const selectAllCb = document.getElementById('selectAllFines');
-            if (selectAllCb) selectAllCb.checked = false;
+            if (selectAllCb) {
+                selectAllCb.checked = false;
+                selectAllCb.indeterminate = false;
+            }
             updateBulkActionBar();
         }
         window.clearSelection = clearSelection;

@@ -405,29 +405,31 @@
                     <div id="summaryDailyStats"></div>
                 </div>
 
-                <!-- Bulk Action Bar -->
-                <div id="bulkActionBar" class="card" style="display: none; background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%); border: none; padding: 15px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                        <div style="color: white; font-weight: 600;">
-                            <span id="selectedCount">0</span> fines selected
-                        </div>
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button class="btn btn-small" style="background: white; color: #27ae60;" onclick="bulkMarkPaid()">Mark Paid</button>
-                            <button class="btn btn-small" style="background: #FFCD00; color: #333;" onclick="bulkMarkUnpaid()">Mark Unpaid</button>
-                            <button class="btn btn-small btn-secondary" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white;" onclick="clearSelection()">Clear</button>
-                        </div>
+                <!-- Quick-select chips + slim refresh (shown once history is loaded) -->
+                <div id="historyToolbar" style="display: none; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+                    <div class="select-chips" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span style="font-size: 0.85em; color: #A8BDE0;">Select:</span>
+                        <button class="btn btn-small btn-secondary" onclick="selectAllVisible()">All</button>
+                        <button class="btn btn-small btn-secondary" onclick="selectUnpaidVisible()">Unpaid</button>
+                        <button class="btn btn-small btn-secondary" onclick="clearSelection()">None</button>
                     </div>
-                </div>
-
-                <div class="card" style="background: linear-gradient(135deg, #152C6B 0%, #0a1e4d 100%); border: 1px solid #2E5AB0; text-align: center; padding: 20px;">
-                    <div style="color: white; margin-bottom: 12px;">
-                        <div style="font-size: 1.1em; font-weight: 600;">Full Fine History</div>
-                        <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">Click refresh to load all fines</div>
-                    </div>
-                    <button id="refreshHistoryBtn" class="btn" onclick="refreshHistory()">Refresh History</button>
+                    <button id="refreshHistoryBtn" class="btn btn-small btn-secondary" onclick="refreshHistory()">🔄 Refresh</button>
                 </div>
 
                 <div id="historyContent"></div>
+
+                <!-- Sticky Bulk Action Bar (fixed above the bottom tab bar) -->
+                <div id="bulkActionBar" class="bulk-action-bar" style="display: none;">
+                    <div class="bulk-bar-info">
+                        <span id="selectedCount">0</span> selected · <span id="selectedTotal">£0.00</span>
+                    </div>
+                    <div class="bulk-bar-actions">
+                        <button class="btn btn-small" style="background: white; color: #1e8449;" onclick="bulkMarkPaid()">Paid</button>
+                        <button class="btn btn-small" style="background: #FFCD00; color: #333;" onclick="bulkMarkUnpaid()">Unpaid</button>
+                        <button class="btn btn-small" style="background: #c0392b; color: white;" onclick="bulkDelete()">Delete</button>
+                        <button class="btn btn-small" style="background: rgba(255,255,255,0.25); color: white; border: 1px solid rgba(255,255,255,0.6);" onclick="clearSelection()">Clear</button>
+                    </div>
+                </div>
             </div>
 
             <!-- ==================== STATS (Secondary) ==================== -->

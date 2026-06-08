@@ -1998,3 +1998,58 @@
                 max-width: 700px;
             }
         }
+
+        /* ===== History tab: bulk-edit upgrade ===== */
+        .fine-row {
+            cursor: pointer;
+            transition: background 0.12s ease;
+        }
+        .fine-row:hover {
+            background: rgba(255, 205, 0, 0.06);
+        }
+        .fine-row.row-selected {
+            background: rgba(255, 205, 0, 0.18);
+        }
+        .fine-row.row-selected td {
+            color: #fff;
+        }
+
+        /* Sticky bulk action bar — floats above the bottom tab bar */
+        .bulk-action-bar {
+            position: fixed;
+            bottom: 96px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 24px);
+            max-width: 676px;
+            z-index: 105;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #1e8449 0%, #145a32 100%);
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .bulk-bar-info {
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.95em;
+        }
+        .bulk-bar-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .bulk-bar-actions .btn-small {
+            padding: 8px 12px;
+            font-weight: 600;
+        }
+
+        /* Keep the last rows clear of the fixed bar */
+        #historyContent {
+            padding-bottom: 90px;
+        }

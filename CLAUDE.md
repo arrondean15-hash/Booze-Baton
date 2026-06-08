@@ -175,6 +175,14 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **08 Jun 2026**:
+  - v3.1.0: History tab bulk-edit upgrade (faster multi-amend on mobile)
+    - **Tap-to-select rows** — tapping anywhere on a fine row toggles selection (`toggleRowSelection`, app.js); selected rows highlight (`.row-selected`). Checkbox set `pointer-events:none` so the row owns selection state (no double-toggle). Per-row Paid/Del buttons tagged `.row-action` and excluded from row-tap via `event.target.closest('.row-action')`.
+    - **Sticky bulk action bar** — `#bulkActionBar` is now `position:fixed` (`bottom:96px`, above the 84px tab bar, `z-index:105`), shows "N selected · £total" and **Paid / Unpaid / Delete / Clear**.
+    - **Bulk Delete added** — `bulkDelete()` loops `callFunction('deleteFine',{fineId})` with a single "Are you sure?" confirm (previously delete was per-row only).
+    - **Quick-select chips** — All / Unpaid / None (`selectAllVisible`, `selectUnpaidVisible`, `clearSelection`) in `#historyToolbar`.
+    - **Auto-load** — opening History auto-loads full fines (`autoLoadHistory` in `switchTab`, only when `cachedFullFines` empty); old "Refresh History" card replaced with a slim refresh button.
+    - Reviewed by booze-reviewer (SHIP); tested on `:5050` (0 console errors, selection wiring verified). Hosting-only deploy (no Cloud Functions change).
 - **07 Jun 2026**:
   - v3.0.2: Security hardening from a full app review (audit findings below)
     - **P1 fix**: `deleteAllFines` Cloud Function now requires `verifySuperAdmin` (was `verifyAuth`) — previously ANY authenticated player could call it and wipe the entire fines ledger (client writes are blocked by rules, so this function was the only delete path and it was unguarded). `functions/index.js:783`
