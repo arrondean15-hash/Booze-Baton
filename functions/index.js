@@ -819,20 +819,45 @@ async function callEaProClubsAPI(endpoint, params = {}) {
 
   functions.logger.info('Calling EA API:', url);
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: EA_API_HEADERS,
-    timeout: 10000
-  });
+  // EA's Pro Clubs API intermittently returns transient 5xx errors (its generic
+  // "Oops, an error occurred" page) and connection timeouts for otherwise-valid
+  // requests. Retry transient failures with exponential backoff; fail fast on
+  // 4xx (e.g. Akamai WAF 403) since those are deterministic. Note: undici's
+  // fetch ignores the legacy `timeout` option, so use AbortSignal.timeout().
+  const MAX_ATTEMPTS = 3;
+  const BACKOFF_MS = [600, 1500];
+  let lastError = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    functions.logger.error('EA API error:', response.status, errorText);
-    throw new Error(`EA API request failed: ${response.status}`);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: EA_API_HEADERS,
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errorText = await response.text();
+      functions.logger.error(`EA API error (attempt ${attempt}/${MAX_ATTEMPTS}):`, response.status, errorText.slice(0, 200));
+      lastError = new Error(`EA API request failed: ${response.status}`);
+
+      // Only retry server-side (5xx) errors; 4xx won't change on retry.
+      if (response.status < 500) break;
+    } catch (err) {
+      // Network error or AbortSignal timeout — transient, worth retrying.
+      functions.logger.error(`EA API fetch error (attempt ${attempt}/${MAX_ATTEMPTS}):`, err.message);
+      lastError = new Error(`EA API request failed: ${err.name === 'TimeoutError' ? 'timeout' : err.message}`);
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS[attempt - 1]));
+    }
   }
 
-  const data = await response.json();
-  return data;
+  throw lastError;
 }
 
 /**
