@@ -175,6 +175,13 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **22 Jun 2026**:
+  - v3.1.1: EA Pro Clubs auto-fetch is **dead by design** — friendly error instead of raw 500
+    - **Root cause (verified, don't re-investigate):** `proclubs.ea.com/api/fc/` is behind **Akamai Bot Manager**. A real browser passes on ~5 signals (TLS JA3/JA4 fingerprint, HTTP/2 fingerprint, headers, residential IP, JS-sensor `_abck`/`bm_sv` cookie). The Cloud Function only ever matched **headers**. Between Feb–Jun 2026 Akamai tightened **TLS-fingerprint detection** (Node/undici JA3 = bot) and **datacenter-IP reputation** (Firebase/GCP egress = negative trust), so the function now gets a 500 HTML error page while the browser still gets 200 JSON.
+    - **Proven unfixable server-side (tested):** browser-like headers, retry/backoff, cookie-forwarding, 8 TLS fingerprints via `curl_cffi`, and replaying a **real browser-minted `bm_sv` server-side** — ALL return 500. `bm_sv`/`_abck` is session+IP-bound, expires fast, can't be replayed. Only a paid anti-bot proxy (Bright Data Web Unlocker / ZenRows / Scrapfly) or a headless-browser-on-Cloud-Run service would work — both cost $ + maintenance and are ~ToS-grey. Not worth it for a fun app; **manual EAFC 26 entry is the path.**
+    - **Backend** (`functions/index.js` `callEaProClubsAPI`): added retry (3×, backoff 600/1500ms) on 5xx + network/timeout, fail-fast on 4xx, and replaced the ignored `timeout: 10000` with `AbortSignal.timeout()` (undici drops the legacy option). Keeps resilience to *genuine* EA blips; doesn't beat the bot wall.
+    - **Frontend** (`app.js`): `isEaBotBlock()` + friendly message on "Fetch from EA" / "Auto-Update EAFC 26" nudging users to the manual EAFC 26 field instead of showing "EA API request failed: 500".
+    - Deployed (functions + hosting), committed (`d200d59`, `64b7a74`).
 - **08 Jun 2026**:
   - v3.1.0: History tab bulk-edit upgrade (faster multi-amend on mobile)
     - **Tap-to-select rows** — tapping anywhere on a fine row toggles selection (`toggleRowSelection`, app.js); selected rows highlight (`.row-selected`). Checkbox set `pointer-events:none` so the row owns selection state (no double-toggle). Per-row Paid/Del buttons tagged `.row-action` and excluded from row-tap via `event.target.closest('.row-action')`.
@@ -265,6 +272,7 @@ These patterns have caused real bugs — check for them when debugging:
 | `onCall` vs `onRequest` mismatch | Admin functions were `onCall` but frontend used raw `fetch` (v2.10.1) | Converted all to `onRequest` — do NOT use `onCall` in this project |
 | Destructive function gated by `verifyAuth` only | `deleteAllFines` used `verifyAuth`, so any authenticated player could wipe all fines (v3.0.2) | Destructive/admin-wide ops must use `verifySuperAdmin`, AND hide their UI controls behind `isSuperAdmin` |
 | `verifySuperAdmin` open when email unset | If `SUPER_ADMIN_EMAIL` is undefined, `undefined !== undefined` is `false` → check passes (v3.0.2) | `verifySuperAdmin` now fails closed (503) when unset and rejects tokens with no `email` |
+| EA Pro Clubs API returns 500 server-side | `proclubs.ea.com/api/fc/` is behind Akamai Bot Manager; works in a browser but blocks Cloud Functions (TLS fingerprint + datacenter-IP). `bm_sv`/`_abck` JS-sensor cookie can't be replayed (22 Jun 2026) | **No server-side fix** — don't re-investigate header/cookie/retry tweaks. Use manual EAFC 26 entry; only a paid anti-bot proxy or headless browser would restore auto-fetch |
 | `showNotification()` doesn't exist | Old function name referenced in match ANY player update | Use `showToast()` instead |
 | `Alert.alert` on web | React Native pattern doesn't work in browser | Use `window.alert` on web |
 | Port 5000 taken on macOS | ControlCenter occupies port 5000 | Use `firebase serve --port 5050` |
