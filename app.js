@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.1.0';
-        const LAST_UPDATED = '08 Jun 2026';
+        const APP_VERSION = 'v3.1.1';
+        const LAST_UPDATED = '22 Jun 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -5429,6 +5429,14 @@
         // EA PRO CLUBS STATS FUNCTIONS
         // ==========================================
 
+        // EA's Pro Clubs API is behind Akamai bot protection that blocks
+        // server-side requests (see CLAUDE.md). When that's the cause, show a
+        // friendly nudge to the manual EAFC 26 field instead of a raw 500.
+        function isEaBotBlock(error) {
+            const m = (error && error.message) || '';
+            return /EA API request failed|Pro Clubs squad|fetch Pro Clubs/i.test(m);
+        }
+
         // Fetch games played from EA Pro Clubs API
         async function fetchEAGamesPlayed() {
             const btn = document.getElementById('fetchEABtn');
@@ -5500,8 +5508,13 @@
 
             } catch (error) {
                 console.error('Failed to fetch EA stats:', error);
-                container.innerHTML = `<div style="color: #ff6b6b; padding: 10px;">Failed to load: ${error.message}</div>`;
-                showToast('Failed to fetch EA stats: ' + error.message, 'error');
+                if (isEaBotBlock(error)) {
+                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⚠️ EA is blocking automated fetches right now (their anti-bot protection — not an app bug).<br><br><span style="color:#A8BDE0;">Enter games manually in the <b>EAFC 26</b> field above — it works exactly the same.</span></div>`;
+                    showToast('EA is blocking auto-fetch — use manual entry', 'error');
+                } else {
+                    container.innerHTML = `<div style="color: #ff6b6b; padding: 10px;">Failed to load: ${error.message}</div>`;
+                    showToast('Failed to fetch EA stats: ' + error.message, 'error');
+                }
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Fetch from EA';
@@ -5568,7 +5581,9 @@
 
             } catch (error) {
                 console.error('Failed to auto-update:', error);
-                showToast('Failed to auto-update: ' + error.message, 'error');
+                showToast(isEaBotBlock(error)
+                    ? 'EA is blocking auto-fetch — enter games manually in the EAFC 26 field'
+                    : ('Failed to auto-update: ' + error.message), 'error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Auto-Update EAFC 26';
