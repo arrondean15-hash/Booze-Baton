@@ -125,6 +125,9 @@
                     <button class="quick-nav-btn" onclick="switchTab('baton')">
                         <i data-lucide="beer"></i><span>Baton</span>
                     </button>
+                    <button class="quick-nav-btn" id="balanceNavBtn" style="display: none" onclick="switchTab('balance')">
+                        <i data-lucide="scale"></i><span>Balance</span>
+                    </button>
                 </div>
 
                 <div id="versionInfo" style="text-align: center; padding: 20px 0 40px; font-size: 0.7em; color: #7B9AD4; opacity: 0.5;">
@@ -531,6 +534,24 @@
                     <div></div>
                 </div>
                 <div id="playersContent"></div>
+            </div>
+
+            <!-- ==================== BALANCE (Secondary, super admin) ==================== -->
+            <div id="balance" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Balance Check</h1>
+                    <div></div>
+                </div>
+                <div class="card">
+                    <label for="balanceCsvInput">Bank statement CSV</label>
+                    <p style="font-size: 0.85em; color: #A8BDE0; margin-bottom: 12px;">
+                        Upload the Lloyds export (signed Balance column). It's checked against
+                        every fine in the app, right here on your device &mdash; the file is never uploaded anywhere.
+                    </p>
+                    <input type="file" id="balanceCsvInput" accept=".csv" onchange="runBalanceCheck(this.files[0])">
+                </div>
+                <div id="balanceResults"></div>
             </div>
 
             <!-- ==================== MANAGE (Secondary) ==================== -->

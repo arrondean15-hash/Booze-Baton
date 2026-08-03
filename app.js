@@ -17,7 +17,7 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.1.2';
+        const APP_VERSION = 'v3.2.0';
         const LAST_UPDATED = '03 Aug 2026';
 
         // Cloud Functions base URL
@@ -417,6 +417,10 @@
             if (adminReplaceImport) adminReplaceImport.style.display = isSuperAdmin ? '' : 'none';
             const clearAllFinesBtn = document.getElementById('clearAllFinesBtn');
             if (clearAllFinesBtn) clearAllFinesBtn.style.display = isSuperAdmin ? '' : 'none';
+
+            // Balance checker (bank statement reconcile) — super admin only
+            const balanceNavBtn = document.getElementById('balanceNavBtn');
+            if (balanceNavBtn) balanceNavBtn.style.display = isSuperAdmin ? '' : 'none';
 
             // Vote admin section - always visible for logged-in users
             const voteAdminSection = document.getElementById('voteAdminSection');
@@ -3469,6 +3473,133 @@
             a.href = url;
             a.download = `booze-baton-${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
+        }
+
+        // ==================== BALANCE CHECK (super admin) ====================
+        // Client-side port of tools/reconcile.py — the bank CSV is parsed in the
+        // browser and never uploaded. Read-only: no fines are marked paid here.
+        // Bank statement name (upper-case substring) -> app playerName
+        const BANK_TO_PLAYER = {
+            'A DEAN': 'Le Dump',
+            'DANNY ROWE': 'Erik Eriksson',
+            'CHARLIE SKELDING': 'Fredu',
+            'HOMER': 'J3',
+            'GLENN HALL': 'Narreh',
+            'BIRDSALL': 'Edu',
+            'ADAM BILYJ': 'Jim Blackpool',
+            'ASHLEY JACKSON': 'Ash'
+        };
+
+        async function runBalanceCheck(file) {
+            if (!file) return;
+            const results = document.getElementById('balanceResults');
+            results.innerHTML = '<div class="card">⏳ Checking against fines…</div>';
+            try {
+                const text = await file.text();
+                // needs every fine, same cache the History tab uses
+                if (cachedFullFines.length === 0) {
+                    const ok = await fetchFullHistory();
+                    if (!ok) throw new Error('Could not load fines from the app');
+                }
+                results.innerHTML = renderBalanceReport(computeBalance(parseBankCsv(text)));
+                if (window.lucide) lucide.createIcons();
+            } catch (err) {
+                console.error('Balance check failed:', err);
+                results.innerHTML = `<div class="card" style="color: #FF6B6B;">✕ ${err.message}</div>`;
+            } finally {
+                const input = document.getElementById('balanceCsvInput');
+                if (input) input.value = '';
+            }
+        }
+        window.runBalanceCheck = runBalanceCheck;
+
+        function parseBankCsv(text) {
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.length < 2) throw new Error('That CSV looks empty');
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const dateIdx = header.findIndex(h => h === 'transaction date');
+            const descIdx = header.findIndex(h => h === 'transaction description');
+            const balIdx = header.findIndex(h => h === 'balance');
+            if (dateIdx === -1 || descIdx === -1 || balIdx === -1) {
+                throw new Error('That doesn\'t look like the bank export — it needs Transaction Date, Transaction Description and Balance columns');
+            }
+            return lines.slice(1).map(l => l.split(',')).map(cols => ({
+                date: (cols[dateIdx] || '').trim(),
+                desc: (cols[descIdx] || '').trim(),
+                amount: parseFloat(cols[balIdx]) // signed: credit +, debit −
+            })).filter(r => !isNaN(r.amount));
+        }
+
+        function computeBalance(rows) {
+            const paid = {}, debits = [], unmapped = new Set();
+            let pot = 0;
+            for (const r of rows) {
+                pot += r.amount;
+                const up = r.desc.toUpperCase();
+                const hit = Object.keys(BANK_TO_PLAYER).find(k => up.includes(k));
+                const player = hit ? BANK_TO_PLAYER[hit] : null;
+                if (r.amount > 0) {
+                    if (player) paid[player] = (paid[player] || 0) + r.amount;
+                    else unmapped.add(r.desc);
+                } else {
+                    // money back out to a known player nets off their paid-in
+                    if (player) paid[player] = (paid[player] || 0) + r.amount;
+                    debits.push({ date: r.date, desc: r.desc, amount: -r.amount });
+                }
+            }
+            const fined = {};
+            let totalFined = 0;
+            for (const f of cachedFullFines) {
+                const amt = parseFloat(f.amount) || 0;
+                fined[f.playerName] = (fined[f.playerName] || 0) + amt;
+                totalFined += amt;
+            }
+            const players = Object.values(BANK_TO_PLAYER).map(p => ({
+                player: p,
+                paid: paid[p] || 0,
+                fined: fined[p] || 0,
+                owes: (fined[p] || 0) - (paid[p] || 0)
+            })).sort((a, b) => b.owes - a.owes);
+            return {
+                players, debits, pot, totalFined,
+                unmapped: [...unmapped],
+                totalPaid: players.reduce((s, p) => s + p.paid, 0),
+                toCollect: players.reduce((s, p) => s + (p.owes > 0.005 ? p.owes : 0), 0)
+            };
+        }
+
+        function renderBalanceReport(d) {
+            const esc = (s) => String(s).replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const gbp = (n) => `£${n.toFixed(2)}`;
+            const diff = (o) => o > 0.005
+                ? `<span style="color: #FF6B6B; font-weight: 700;">owes ${gbp(o)}</span>`
+                : (o < -0.005
+                    ? `<span style="color: #7FD4FF;">${gbp(-o)} credit</span>`
+                    : `<span style="color: #4CAF50;">paid up ✓</span>`);
+            return `
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-label">Paid In</div><div class="stat-value">${gbp(d.totalPaid)}</div></div>
+                    <div class="stat-card"><div class="stat-label">In The Pot</div><div class="stat-value">${gbp(d.pot)}</div></div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-label">Still To Collect</div><div class="stat-value">${gbp(d.toCollect)}</div></div>
+                    <div class="stat-card"><div class="stat-label">Total Fines</div><div class="stat-value">${gbp(d.totalFined)}</div></div>
+                </div>
+                ${d.unmapped.length ? `<div class="card" style="color: #FFCD00;">⚠ Unmapped payer(s): ${d.unmapped.map(esc).join(', ')} — add them to BANK_TO_PLAYER</div>` : ''}
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">Per player</h3>
+                    <div class="table-container"><table>
+                        <tr><th>Player</th><th>Paid in</th><th>Fined</th><th>Difference</th></tr>
+                        ${d.players.map(p => `<tr><td>${esc(p.player)}</td><td>${gbp(p.paid)}</td><td>${gbp(p.fined)}</td><td>${diff(p.owes)}</td></tr>`).join('')}
+                    </table></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-bottom: 10px;">Money out — review</h3>
+                    ${d.debits.length
+                        ? d.debits.map(x => `<div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #2E5AB0;"><span>${esc(x.date)} · ${esc(x.desc)}</span><b>${gbp(x.amount)}</b></div>`).join('')
+                        : '<p style="color: #A8BDE0;">No debits on this statement.</p>'}
+                </div>`;
         }
 
         function exportPDF() {

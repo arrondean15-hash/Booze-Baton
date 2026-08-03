@@ -175,6 +175,9 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **03 Aug 2026 (later)**:
+  - v3.2.0: Balance Check screen (super-admin only) — upload the Lloyds bank CSV (signed-Balance format) and reconcile client-side against all fines: summary cards (paid in / pot / to collect / total fines), per-player paid-vs-fined table, unmapped-payer warning, money-out list. Port of tools/reconcile.py from the leeds… booze-baton-app project repo; BANK_TO_PLAYER map baked into app.js. CSV never leaves the browser; feature is read-only (no fine writes). Quick-nav tile `#balanceNavBtn` gated in updateProfileUI. Logic verified against reconcile.py output on live data (penny-exact, CRLF-safe, HTML-escaped rendering).
+
 - **03 Aug 2026**:
   - v3.1.2: CSV export fields now quoted (`csvEscape` in `exportData`) — reasons containing commas (e.g. "Average Rating Following Defeat (Attacker 6.9 and below, ...)") were splitting into extra columns, pushing 21 fines' amounts out of the Amount column (£42 hidden; column summed £1,887.12 vs true £1,929.12). Importer already parses quoted fields — round-trip verified against all 1,306 live fines (0 failures). Hosting-only deploy.
 
