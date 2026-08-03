@@ -175,6 +175,9 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **03 Aug 2026**:
+  - v3.1.2: CSV export fields now quoted (`csvEscape` in `exportData`) — reasons containing commas (e.g. "Average Rating Following Defeat (Attacker 6.9 and below, ...)") were splitting into extra columns, pushing 21 fines' amounts out of the Amount column (£42 hidden; column summed £1,887.12 vs true £1,929.12). Importer already parses quoted fields — round-trip verified against all 1,306 live fines (0 failures). Hosting-only deploy.
+
 - **22 Jun 2026**:
   - v3.1.1: EA Pro Clubs auto-fetch is **dead by design** — friendly error instead of raw 500
     - **Root cause (verified, don't re-investigate):** `proclubs.ea.com/api/fc/` is behind **Akamai Bot Manager**. A real browser passes on ~5 signals (TLS JA3/JA4 fingerprint, HTTP/2 fingerprint, headers, residential IP, JS-sensor `_abck`/`bm_sv` cookie). The Cloud Function only ever matched **headers**. Between Feb–Jun 2026 Akamai tightened **TLS-fingerprint detection** (Node/undici JA3 = bot) and **datacenter-IP reputation** (Firebase/GCP egress = negative trust), so the function now gets a 500 HTML error page while the browser still gets 200 JSON.
