@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.1.1';
-        const LAST_UPDATED = '22 Jun 2026';
+        const APP_VERSION = 'v3.1.2';
+        const LAST_UPDATED = '03 Aug 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -3445,6 +3445,13 @@
                 return;
             }
 
+            // Quote fields containing commas/quotes/newlines so reasons like
+            // "Average Rating Following Defeat (Attacker 6.9 and below, ...)"
+            // don't split across columns (importer already parses quotes)
+            const csvEscape = (value) => {
+                const s = String(value ?? '');
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            };
             const csv = [
                 ['Name', 'Date', 'Fine', 'Amount', 'Paid'],
                 ...fines.map(f => [
@@ -3454,7 +3461,7 @@
                     f.amount,
                     f.paidDate || ''
                 ])
-            ].map(row => row.join(',')).join('\n');
+            ].map(row => row.map(csvEscape).join(',')).join('\n');
 
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
