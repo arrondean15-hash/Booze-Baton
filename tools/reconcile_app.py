@@ -138,6 +138,12 @@ def run_reconcile(csv_path):
     except Exception as e:                       # noqa: BLE001
         return False, f"Reconciliation failed: {e}"
 
+    # annotate each row with the bank-statement name it was matched on,
+    # so the table can show the full bridge: bank CSV name ↔ app gamertag
+    bank_by_player = {p: k for k, p in engine.BANK_TO_PLAYER.items()}
+    for r in rows:
+        r["bank"] = bank_by_player.get(r["player"], "—")
+
     to_collect = sum(r["owes"] for r in rows if r["owes"] > 0.005)
     total_paid = sum(r["paid"] for r in rows)
     LAST.clear()
@@ -258,6 +264,9 @@ tr.owe{background:rgba(255,107,107,.08)}tr.owe td.diff{color:#ff8a8a;font-weight
 tr.paid{background:rgba(86,224,140,.07)}tr.paid td.diff{color:#56e08c;font-weight:800}
 tr.cred td.diff{color:#9fe0ff;font-weight:700}
 .tag{color:#8ea3d6;font-size:12px;margin-left:6px}
+.bank{color:#c3cef0;font-size:12px;font-family:ui-monospace,Menlo,monospace;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+  border-radius:6px;padding:2px 7px}
 .debit{display:flex;justify-content:space-between;padding:9px 4px;
   border-bottom:1px dashed rgba(255,255,255,.1);font-size:13px;color:#dfe6f8}
 .debit b{color:#fff}
@@ -350,11 +359,12 @@ RESULTS = """<!doctype html><html><head><meta charset="utf-8">
 <div class="panel">
   <h2>Per-player</h2>
   <table>
-    <tr><th>Player</th><th class="num">Paid in</th><th class="num">Fined</th><th class="num">Difference</th></tr>
+    <tr><th>Player</th><th>Bank statement name</th><th class="num">Paid in</th><th class="num">Fined</th><th class="num">Difference</th></tr>
     {% for r in d.rows %}
     {% if r.owes > 0.005 %}{% set cls='owe' %}{% elif r.owes < -0.005 %}{% set cls='cred' %}{% else %}{% set cls='paid' %}{% endif %}
     <tr class="{{ cls }}">
       <td>{{ r.name }}<span class="tag">{{ r.player }}</span></td>
+      <td><span class="bank">{{ r.bank }}</span></td>
       <td class="num">£{{ '%.2f'|format(r.paid) }}</td>
       <td class="num">£{{ '%.2f'|format(r.fined) }}</td>
       <td class="num diff">

@@ -99,24 +99,32 @@ def find_csv(args):
 
 def reconcile(csv_path, tok):
     # --- bank side ---
+    # New export format: the Balance column holds the SIGNED transaction amount
+    # (credit positive, debit negative) — there is no running balance, so the
+    # pot balance is the sum of every row.
     paid = collections.defaultdict(float)
-    debits, balance, unmapped = [], None, set()
+    debits, balance, unmapped = [], 0.0, set()
     with open(csv_path, encoding="latin-1") as f:
         for r in csv.DictReader(f):
             desc = r["Transaction Description"].strip()
-            credit = r["Credit Amount"].strip()
-            debit = r["Debit Amount"].strip()
-            if r["Balance"].strip() and balance is None:
-                balance = float(r["Balance"])     # first row = most recent
-            if credit:
-                up = desc.upper()
-                hit = next((p for k, p in BANK_TO_PLAYER.items() if k in up), None)
+            amt_s = r["Balance"].strip()
+            if not amt_s:
+                continue
+            amt = float(amt_s)
+            balance += amt
+            up = desc.upper()
+            hit = next((p for k, p in BANK_TO_PLAYER.items() if k in up), None)
+            if amt > 0:
                 if hit:
-                    paid[hit] += float(credit)
+                    paid[hit] += amt
                 else:
                     unmapped.add(desc)
-            if debit:
-                debits.append((r["Transaction Date"], desc, float(debit)))
+            elif amt < 0:
+                # money back out to a known player nets off their paid-in
+                # (e.g. A DEAN refunds himself) — still listed for review
+                if hit:
+                    paid[hit] += amt
+                debits.append((r["Transaction Date"], desc, -amt))
 
     # --- app side ---
     fined = collections.defaultdict(float)
