@@ -580,15 +580,18 @@
 
                 <div class="card">
                     <h3 style="margin-bottom: 10px; color: #FFCD00;">EA Pro Clubs Stats</h3>
-                    <div class="info-text" style="margin-bottom: 15px;">
-                        Live games played from EA servers (Benidorm United)
+                    <div class="ea-paused-banner">
+                        &#9208; <b>EA sync is switched off</b><br>
+                        EA gave our old club ID (21853) to another team on EAFC 26, so fetching
+                        would pull <b>their</b> stats into our records. It stays off until
+                        Benidorm United is set up on the new game.
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn" onclick="fetchEAGamesPlayed()" id="fetchEABtn">Fetch from EA</button>
-                        <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn">Auto-Update EAFC 26</button>
+                        <button class="btn" onclick="fetchEAGamesPlayed()" id="fetchEABtn" disabled>Fetch from EA</button>
+                        <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn" disabled>Auto-Update EAFC 26</button>
                     </div>
                     <div class="info-text" style="margin-top: 10px; font-size: 0.8em;">
-                        Auto-Update syncs EA games to EAFC 26 field (excludes Void matches)
+                        Enter games manually in the <b>EAFC 26</b> field above until EA sync is back on.
                     </div>
                     <div id="eaGamesPlayedList" style="margin-top: 15px;"></div>
                 </div>
@@ -966,11 +969,16 @@
 
                 <div class="card" style="text-align: center; margin-bottom: 15px;">
                     <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                        <button class="btn btn-success" onclick="logNewMatches()" id="logMatchesBtn">Log New Matches</button>
-                        <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn">Refresh History</button>
+                        <button class="btn btn-success" onclick="logNewMatches()" id="logMatchesBtn" disabled>Log New Matches</button>
+                        <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn" disabled>Refresh History</button>
+                    </div>
+                    <div class="ea-paused-banner" style="margin-top: 12px;">
+                        &#9208; <b>Match logging is switched off</b><br>
+                        The 1am auto-log is stopped too. Our club no longer exists under the old
+                        EA club ID, so logging would pull another team's games in. The
+                        502 matches already saved are safe and still shown below.
                     </div>
                     <div id="matchesLastUpdated" style="font-size: 0.85em; color: #7B9AD4; margin-top: 8px;"></div>
-                    <div style="font-size: 0.8em; color: #7B9AD4; margin-top: 4px;">Auto-logs daily at 1am &bull; Manual log checks for new matches only</div>
                 </div>
 
                 <div class="card">

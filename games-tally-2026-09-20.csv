@@ -1,0 +1,16 @@
+Player,EA Gamertag,EA Games Incl Void,Void Games,EA Games Excl Void (stored eafc26),EAFC25,Season 24/25,Adjustment,Total Games (app formula),Logged Appearances,Logged Void Appearances
+Edu,Mattyb10,779,12,767,976,806,0,937,426,12
+J3,jackhomer135,698,11,687,677,555,0,809,398,11
+Jim Blackpool,Billy LUFC6260,621,11,610,640,576,0,674,370,11
+Narreh,Narreh_Neck,602,12,590,774,654,-6,704,368,12
+Le Dump,AzZa DeAn0,598,9,589,783,643,-6,723,361,9
+Erik Eriksson,LUFC dAnNyR,597,13,584,626,529,0,681,358,13
+Fredu,MI CHARVVYYY,569,6,563,622,533,-6,646,305,6
+Ash,ashblackson,523,9,514,683,548,0,649,316,9
+(guest) jLND97,jLND97,,,,,,,,6,0
+(guest) camhawk97,camhawk97,,,,,,,,15,0
+
+"Source: Booze Baton Firestore. EA Games figures are the last good EA sync, 2026-09-07 21:15 UTC."
+"Logged appearances cover 502 matches, 2026-01-27 to 2026-09-06. 18 of those matches are marked Void."
+EA Games Incl Void = stored eafc26 + void games. The app stores eafc26 already void-adjusted (app.js autoUpdateEAFC26).
+"Exported 2026-09-20 after removing 4 matches wrongly logged from EA club 21853, which is no longer Benidorm United."

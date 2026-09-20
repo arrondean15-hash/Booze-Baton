@@ -16,8 +16,30 @@ const API_BASE_URL = 'https://v3.football.api-sports.io/';
 
 // EA Pro Clubs API configuration
 const EA_API_BASE_URL = 'https://proclubs.ea.com/api/fc/';
-const EA_CLUB_ID = '21853'; // Benidorm United
+const EA_CLUB_ID = '21853'; // STALE — was Benidorm United on FC25, now a different club on FC26
 const EA_PLATFORM = 'common-gen5'; // PS5/Xbox Series X|S
+
+// Master kill switch for every EA Pro Clubs call.
+//
+// Turned off 20 Sep 2026: EA re-issued club IDs for EAFC 26 and club 21853 now belongs to
+// someone else. With it live, `logProClubsMatches` wrote 4 of that club's matches into our
+// history (players maiss99 / Bsaghair / most_j1349j), and `relogAllMatches` would have
+// deleted all 502 genuine matches and logged nothing back.
+//
+// TO RE-ENABLE once Benidorm United exists on EAFC 26:
+//   1. Set EA_CLUB_ID above to the new club ID.
+//   2. Set EA_SYNC_ENABLED to true.
+//   3. Deploy functions, then run the manual "Log Matches" ONCE and check what it logged
+//      before letting the 1am scheduled job run.
+const EA_SYNC_ENABLED = false;
+
+// Standard refusal used by every EA-backed endpoint while the sync is paused.
+function eaSyncDisabled(res) {
+  functions.logger.warn('EA sync is disabled (EA_SYNC_ENABLED = false) — request refused');
+  sendError(res, 503, 'ea-sync-disabled',
+    'EA sync is paused. Club ID 21853 is no longer Benidorm United on EAFC 26, so EA data ' +
+    'would belong to another team. Enter games manually until the club is set up on the new game.');
+}
 
 // Headers to mimic browser request (required by EA's WAF)
 const EA_API_HEADERS = {
@@ -871,6 +893,8 @@ exports.getProClubsMatches = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
+    if (!EA_SYNC_ENABLED) return eaSyncDisabled(res);
+
     const matchType = req.query.matchType || req.body?.matchType || 'leagueMatch';
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
@@ -958,6 +982,8 @@ exports.getProClubsSquad = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
+    if (!EA_SYNC_ENABLED) return eaSyncDisabled(res);
+
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
     functions.logger.info(`Fetching Pro Clubs squad for club ${clubId}`);
@@ -1012,6 +1038,8 @@ exports.getProClubsInfo = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
+    if (!EA_SYNC_ENABLED) return eaSyncDisabled(res);
+
     const clubId = req.query.clubId || req.body?.clubId || EA_CLUB_ID;
 
     functions.logger.info(`Fetching Pro Clubs info for club ${clubId}`);
@@ -1057,8 +1085,25 @@ exports.getProClubsInfo = functions.https.onRequest(async (req, res) => {
  * Returns count of new matches logged
  */
 async function fetchAndLogNewMatches() {
+  if (!EA_SYNC_ENABLED) {
+    functions.logger.warn('fetchAndLogNewMatches skipped: EA sync disabled (EA_CLUB_ID is not our club)');
+    return { logged: 0, skipped: 0, rejected: 0, disabled: true };
+  }
+
   const clubId = EA_CLUB_ID;
   const matchTypes = ['leagueMatch', 'playoffMatch', 'friendlyMatch'];
+
+  // Known club gamertags, from config/playerMappings. EA re-issues club IDs between
+  // titles, so EA_CLUB_ID can silently start resolving to a stranger's club (it did on
+  // 20 Sep 2026 — 4 matches for players maiss99/Bsaghair/most_j1349j were logged as
+  // ours). Any match with none of our gamertags in it is not our match; skip it.
+  let knownGamertags = new Set();
+  try {
+    const mappingsDoc = await db.collection('config').doc('playerMappings').get();
+    knownGamertags = new Set(Object.keys(mappingsDoc.data()?.mappings || {}));
+  } catch (error) {
+    functions.logger.warn(`Could not load playerMappings for club check: ${error.message}`);
+  }
 
   // Fetch latest matches from EA across all match types
   let allMatches = [];
@@ -1088,11 +1133,12 @@ async function fetchAndLogNewMatches() {
 
   if (allMatches.length === 0) {
     functions.logger.info('No matches returned from EA API across all match types');
-    return { logged: 0, skipped: 0 };
+    return { logged: 0, skipped: 0, rejected: 0 };
   }
 
   let logged = 0;
   let skipped = 0;
+  let rejected = 0; // matches EA returned that contain none of our players
 
   for (const match of allMatches) {
     const matchId = match.matchId;
@@ -1138,6 +1184,19 @@ async function fetchAndLogNewMatches() {
       mom: stats.mom === '1'
     }));
 
+    // Ownership check — skip matches that contain none of our known gamertags.
+    // Only enforced when we actually have mappings loaded, so an empty/unreadable
+    // playerMappings doc can never silently stop all logging.
+    if (knownGamertags.size > 0 && !playerStats.some(p => knownGamertags.has(p.name))) {
+      rejected++;
+      functions.logger.warn(
+        `Skipped match ${matchId} vs ${opponentClub?.details?.name}: no known club players ` +
+        `(saw ${playerStats.map(p => p.name).join(', ') || 'none'}). ` +
+        `EA_CLUB_ID ${clubId} may no longer be our club.`
+      );
+      continue;
+    }
+
     // Determine result
     const ourScore = ourClub ? parseInt(ourClub.goals) || 0 : 0;
     const opponentScore = opponentClub ? parseInt(opponentClub.goals) || 0 : 0;
@@ -1161,7 +1220,7 @@ async function fetchAndLogNewMatches() {
     functions.logger.info(`Logged match ${matchId}: ${result} ${ourScore}-${opponentScore} vs ${opponentClub?.details?.name}`);
   }
 
-  return { logged, skipped };
+  return { logged, skipped, rejected };
 }
 
 /**
@@ -1176,7 +1235,7 @@ exports.scheduledMatchLog = functions.pubsub
 
     try {
       const result = await fetchAndLogNewMatches();
-      functions.logger.info(`Scheduled log complete: ${result.logged} new, ${result.skipped} duplicates skipped`);
+      functions.logger.info(`Scheduled log complete: ${result.logged} new, ${result.skipped} duplicates skipped, ${result.rejected} rejected as not our club`);
       return null;
     } catch (error) {
       functions.logger.error('Scheduled match log failed:', error.message);
@@ -1195,6 +1254,8 @@ exports.logProClubsMatches = functions.https.onRequest(async (req, res) => {
     const user = await verifyAuth(req, res);
     if (!user) return;
 
+    if (!EA_SYNC_ENABLED) return eaSyncDisabled(res);
+
     functions.logger.info('Manual match log triggered');
 
     const result = await fetchAndLogNewMatches();
@@ -1203,7 +1264,9 @@ exports.logProClubsMatches = functions.https.onRequest(async (req, res) => {
       success: true,
       logged: result.logged,
       skipped: result.skipped,
-      message: `Logged ${result.logged} new matches, skipped ${result.skipped} duplicates`
+      rejected: result.rejected,
+      message: `Logged ${result.logged} new matches, skipped ${result.skipped} duplicates` +
+        (result.rejected > 0 ? `, rejected ${result.rejected} matches that aren't ours (EA club ID may be wrong)` : '')
     });
 
   } catch (error) {
@@ -1221,6 +1284,11 @@ exports.relogAllMatches = functions.https.onRequest(async (req, res) => {
   try {
     const user = await verifySuperAdmin(req, res);
     if (!user) return;
+
+    // Refuse before the delete, not after. This function deletes every stored match and
+    // then re-fetches; with EA pointing at the wrong club that destroys the history and
+    // logs nothing back.
+    if (!EA_SYNC_ENABLED) return eaSyncDisabled(res);
 
     functions.logger.info('Clearing and re-logging all matches...');
 

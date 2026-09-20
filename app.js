@@ -17,8 +17,14 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.2.0';
-        const LAST_UPDATED = '03 Aug 2026';
+        // Mirrors EA_SYNC_ENABLED in functions/index.js. While false, every EA-backed
+        // control is disabled in markup AND guarded here, because each of those handlers
+        // ends in a `finally` that sets btn.disabled = false — which would silently undo
+        // the disabled state if one ever ran. Guards must return BEFORE the try.
+        const EA_FEATURES_ENABLED = false;
+
+        const APP_VERSION = 'v3.4.0';
+        const LAST_UPDATED = '20 Sep 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -1222,7 +1228,7 @@
             console.log('✅ Voting system initialized...');
 
             // Load Pro Clubs match history and player mappings
-            loadLoggedMatches().then(() => {
+            loadLoggedMatches(true).then(() => {
                 loadPlayerMappings();
                 console.log('✅ Match history and player mappings loaded...');
             });
@@ -1639,6 +1645,25 @@
             });
         }
 
+        // Void games per app player name, counted from logged matches only — no EA call.
+        // Same rule the rest of the app uses: a match is void when anyPlayer === 'Void',
+        // and it counts against every player who appeared in it. Returns {} until the
+        // match cache and player mappings have both loaded.
+        function getVoidCountsByAppPlayer() {
+            const counts = {};
+            if (!loggedMatchesCache || !loggedMatchesCache.matches) return counts;
+
+            for (const match of loggedMatchesCache.matches) {
+                if (match.anyPlayer !== 'Void') continue;
+                for (const p of (match.players || [])) {
+                    const appName = playerMappings[p.name];
+                    if (!appName) continue; // guest or unmapped gamertag
+                    counts[appName] = (counts[appName] || 0) + 1;
+                }
+            }
+            return counts;
+        }
+
         function calculateTotalGames(player) {
             const eafc25 = player.eafc25 || 0;
             const season2425 = player.season2425 || 0;
@@ -1656,8 +1681,18 @@
                 return;
             }
 
+            const voidCounts = getVoidCountsByAppPlayer();
+
             table.innerHTML = allPlayers.map(player => {
+                const eafc25 = player.eafc25 || 0;
+                const season2425 = player.season2425 || 0;
+                const eafc26 = player.eafc26 || 0;
+                const adjustment = player.adjustment || 0;
                 const total = calculateTotalGames(player);
+                const voids = voidCounts[player.name] || 0;
+                const inclVoid = eafc26 + voids;
+                // Signed display so the sum reads as real arithmetic, not four loose numbers.
+                const sign = n => (n < 0 ? '\u2212' : '+') + Math.abs(n);
                 return `
                     <div class="player-card">
                         <div class="player-name">${player.name}</div>
@@ -1665,9 +1700,25 @@
                             <div class="games-row">
                                 <div style="flex: 1;">
                                     <label style="font-size: 0.85em;">EAFC 26</label>
-                                    <input type="number" class="games-input" value="${player.eafc26 || 0}"
+                                    <input type="number" class="games-input" value="${eafc26}"
                                            onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
                                 </div>
+                            </div>
+                            <div class="calc-breakdown">
+                                <div class="calc-title">How this total is worked out</div>
+                                <div class="calc-row"><span>EAFC 25</span><span>${eafc25}</span></div>
+                                <div class="calc-row"><span>Season 24/25</span><span>${sign(-season2425)}</span></div>
+                                <div class="calc-row"><span>EAFC 26</span><span>${sign(eafc26)}</span></div>
+                                <div class="calc-row"><span>Adjustment</span><span>${sign(adjustment)}</span></div>
+                                <div class="calc-row calc-sum"><span>Total Games</span><span>${total}</span></div>
+                            </div>
+                            <div class="games-voids">
+                                <span>Void games: <b style="color: ${voids > 0 ? '#e74c3c' : '#A8BDE0'};">${voids}</b></span>
+                                <span>EAFC 26 incl. voids: <b style="color: #6ECEB2;">${inclVoid}</b></span>
+                            </div>
+                            <div class="calc-note">
+                                EAFC 26 (${eafc26}) already has ${voids} void game${voids === 1 ? '' : 's'} taken off.
+                                Voids are matches marked "Void" in Match History and don't count towards fines.
                             </div>
                             <div class="games-total">
                                 Total Games: ${total}
@@ -2439,7 +2490,7 @@
 
             const [finesOk] = await Promise.all([
                 fetchFullHistory(),
-                loadLoggedMatches()
+                loadLoggedMatches(true)
             ]);
 
             if (headerBtn) {
@@ -5433,6 +5484,7 @@
 
         // Log new matches from EA to Firestore
         async function logNewMatches() {
+            if (!EA_FEATURES_ENABLED) return showEaPausedNotice();
             const btn = document.getElementById('logMatchesBtn');
             const originalText = btn.textContent;
             btn.textContent = '⏳ Logging...';
@@ -5446,14 +5498,17 @@
                     if (logged > 0) {
                         showToast(`Logged ${logged} new matches!`, 'success');
                         // Reload the match history
-                        await loadLoggedMatches();
+                        await loadLoggedMatches(true);
                     } else {
                         showToast(`No new matches to log (${skipped} already logged)`, 'info');
                     }
                 }
             } catch (error) {
                 console.error('Error logging matches:', error);
-                showToast('Failed to log matches: ' + error.message, 'error');
+                showToast(isEaSyncDisabled(error)
+                    ? 'EA sync is paused — matches cannot be logged until the new club is set up'
+                    : ('Failed to log matches: ' + error.message),
+                    isEaSyncDisabled(error) ? 'info' : 'error');
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -5461,7 +5516,11 @@
         }
 
         // Load logged match history from Firestore
-        async function loadLoggedMatches() {
+        async function loadLoggedMatches(force = false) {
+            // Reads Firestore only, never EA. Disabled at Arron's request so nothing in the
+            // Matches screen is clickable while the club is unresolved. `force` lets init
+            // still populate the cache the match table and void counts depend on.
+            if (!EA_FEATURES_ENABLED && !force) return showEaPausedNotice();
             try {
                 const data = await callFunctionGet('getLoggedMatches');
 
@@ -5575,8 +5634,16 @@
             return /EA API request failed|Pro Clubs squad|fetch Pro Clubs/i.test(m);
         }
 
+        // EA sync is deliberately paused server-side (EA_SYNC_ENABLED = false) because
+        // club 21853 is no longer Benidorm United on EAFC 26. Different cause to the bot
+        // block above, so say so plainly rather than blaming EA's anti-bot protection.
+        function isEaSyncDisabled(error) {
+            return (error && error.code) === 'ea-sync-disabled';
+        }
+
         // Fetch games played from EA Pro Clubs API
         async function fetchEAGamesPlayed() {
+            if (!EA_FEATURES_ENABLED) return showEaPausedNotice();
             const btn = document.getElementById('fetchEABtn');
             const container = document.getElementById('eaGamesPlayedList');
 
@@ -5646,7 +5713,10 @@
 
             } catch (error) {
                 console.error('Failed to fetch EA stats:', error);
-                if (isEaBotBlock(error)) {
+                if (isEaSyncDisabled(error)) {
+                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⏸️ EA sync is paused on purpose.<br><br><span style="color:#A8BDE0;">EA gave our old club ID (21853) to another team on EAFC 26, so fetching would pull <b>their</b> stats. Sync stays off until Benidorm United is set up on the new game.<br><br>Use the <b>EAFC 26</b> field above to enter games manually.</span></div>`;
+                    showToast('EA sync is paused — enter games manually', 'info');
+                } else if (isEaBotBlock(error)) {
                     container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⚠️ EA is blocking automated fetches right now (their anti-bot protection — not an app bug).<br><br><span style="color:#A8BDE0;">Enter games manually in the <b>EAFC 26</b> field above — it works exactly the same.</span></div>`;
                     showToast('EA is blocking auto-fetch — use manual entry', 'error');
                 } else {
@@ -5662,6 +5732,7 @@
 
         // Auto-update EAFC 26 games from EA data (excluding void matches)
         async function autoUpdateEAFC26() {
+            if (!EA_FEATURES_ENABLED) return showEaPausedNotice();
             const btn = document.getElementById('autoUpdateBtn');
 
             try {
@@ -5719,9 +5790,13 @@
 
             } catch (error) {
                 console.error('Failed to auto-update:', error);
-                showToast(isEaBotBlock(error)
-                    ? 'EA is blocking auto-fetch — enter games manually in the EAFC 26 field'
-                    : ('Failed to auto-update: ' + error.message), 'error');
+                showToast(
+                    isEaSyncDisabled(error)
+                        ? 'EA sync is paused (old club ID belongs to another team) — enter games manually'
+                        : isEaBotBlock(error)
+                            ? 'EA is blocking auto-fetch — enter games manually in the EAFC 26 field'
+                            : ('Failed to auto-update: ' + error.message),
+                    isEaSyncDisabled(error) ? 'info' : 'error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Auto-Update EAFC 26';
@@ -5745,9 +5820,15 @@
                     }
                 });
                 renderPlayerMappingTable();
+                updateManagePlayersTable(); // void counts need mappings + match cache
             } catch (error) {
                 console.error('Error loading player mappings:', error);
             }
+        }
+
+        // Single message for every EA-backed control while the sync is off.
+        function showEaPausedNotice() {
+            showToast('EA sync is off — our old club ID now belongs to another team', 'info');
         }
 
         // Get unique EA player names from logged matches

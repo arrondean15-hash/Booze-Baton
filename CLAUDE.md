@@ -175,6 +175,46 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **20 Sep 2026**:
+  - **EA re-issued club IDs for EAFC 26 — club `21853` is no longer Benidorm United.**
+    On 20 Sep at 09:27 UTC a manual "Log Matches" fetched 4 matches for clubIds=21853 and
+    wrote another club's games into `proClubsMatches` (players `maiss99`, `Bsaghair`,
+    `most_j1349j`, `ramialmais99`). Proven from the production log line
+    `Fetched 4 leagueMatch matches from EA API` plus `players["21853"]` containing those names.
+    The 4 docs were deleted; 502 genuine matches (27 Jan – 6 Sep 2026) remain.
+  - **Note: EA's Akamai block has LIFTED for GCP egress** (clean 200s on 19–20 Sep). The
+    22 Jun 2026 entry below is no longer current — auto-fetch resumed on its own, which is
+    exactly how the wrong-club data got in. EA's *club search* endpoint is still down
+    (since 19 Jun 2026), so you cannot look a club up by name.
+  - v3.3.0: ownership guard + EA kill switch (functions + hosting deployed)
+    - `fetchAndLogNewMatches` loads `config/playerMappings` and **skips any match containing
+      none of our 8 known gamertags**, counted separately as `rejected` (not `skipped`, so a
+      future hijack isn't disguised as "N duplicates"). Replayed over all 506 matches: rejects
+      exactly the 4 foreign ones, keeps all 502 including guests `camhawk97` / `jLND97`.
+    - `EA_SYNC_ENABLED = false` master kill switch (`functions/index.js:34`) gating all 4
+      `callEaProClubsAPI` sites — `getProClubsMatches`, `getProClubsSquad`, `getProClubsInfo`,
+      `fetchAndLogNewMatches` — plus `logProClubsMatches` and **`relogAllMatches`, which now
+      refuses BEFORE its unconditional batch delete**. Re-enable steps are in the comment above it.
+    - Frontend `isEaSyncDisabled(error)` keys on `error.code === 'ea-sync-disabled'` so the copy
+      says "paused on purpose", not the (now wrong) "EA is blocking automated fetches".
+    - Void games surfaced in Manage from local logged matches — no EA call needed.
+  - v3.4.0: full calculation transparency + hard-disabled EA controls (hosting deployed)
+    - Manage player cards show every step: `EAFC 25 / − Season 24/25 / + EAFC 26 / + Adjustment
+      / = Total Games`, signed, plus a plain-English void note. All 8 players verified to sum
+      to `calculateTotalGames`.
+    - `#fetchEABtn`, `#autoUpdateBtn`, `#logMatchesBtn`, `#refreshMatchesBtn` disabled three ways:
+      `disabled` attribute, `.btn[disabled]` CSS (grey fill, red border, strikethrough,
+      `not-allowed`), and handler guards that **return before the `try`** — each handler ends in a
+      `finally` setting `btn.disabled = false`, which would otherwise silently un-grey them.
+    - `loadLoggedMatches(force)` — reads Firestore only, never EA, but disabled at Arron's
+      request. `force = true` from init, header refresh-all, and post-log so the match cache
+      and void counts still populate.
+    - **Cloud Scheduler `firebase-schedule-scheduledMatchLog-us-central1` set to PAUSED.**
+  - **Export**: `games-tally-2026-09-20.csv` — per-player games *including* voids, as of the
+    last good EA sync (7 Sep 2026 21:15 UTC, proven from the `updatePlayers` log). Note stored
+    `eafc26` is **already void-adjusted** (`autoUpdateEAFC26` writes `gamesPlayed − voidCount`),
+    so raw EA games = `eafc26 + voids`.
+
 - **03 Aug 2026 (later)**:
   - v3.2.0: Balance Check screen (super-admin only) — upload the Lloyds bank CSV (signed-Balance format) and reconcile client-side against all fines: summary cards (paid in / pot / to collect / total fines), per-player paid-vs-fined table, unmapped-payer warning, money-out list. Port of tools/reconcile.py from the leeds… booze-baton-app project repo; BANK_TO_PLAYER map baked into app.js. CSV never leaves the browser; feature is read-only (no fine writes). Quick-nav tile `#balanceNavBtn` gated in updateProfileUI. Logic verified against reconcile.py output on live data (penny-exact, CRLF-safe, HTML-escaped rendering).
 
@@ -278,6 +318,9 @@ These patterns have caused real bugs — check for them when debugging:
 | `onCall` vs `onRequest` mismatch | Admin functions were `onCall` but frontend used raw `fetch` (v2.10.1) | Converted all to `onRequest` — do NOT use `onCall` in this project |
 | Destructive function gated by `verifyAuth` only | `deleteAllFines` used `verifyAuth`, so any authenticated player could wipe all fines (v3.0.2) | Destructive/admin-wide ops must use `verifySuperAdmin`, AND hide their UI controls behind `isSuperAdmin` |
 | `verifySuperAdmin` open when email unset | If `SUPER_ADMIN_EMAIL` is undefined, `undefined !== undefined` is `false` → check passes (v3.0.2) | `verifySuperAdmin` now fails closed (503) when unset and rejects tokens with no `email` |
+| EA club ID goes stale between titles | EA re-issued club IDs for EAFC 26; `21853` became another club and 4 of their matches were logged as ours (20 Sep 2026) | `EA_SYNC_ENABLED` kill switch + ownership guard (skip matches with none of our gamertags). Never trust `players[clubId]` without checking the names |
+| `firebase deploy --only functions` can un-pause a paused scheduler | Firebase re-applies the Cloud Scheduler spec from `.pubsub.schedule(...)` on every functions deploy | Re-check `gcloud scheduler jobs list --location us-central1` after ANY functions deploy and re-pause if needed |
+| Disabling a button that has a `finally { btn.disabled = false }` | Guarding inside the `try` lets the `finally` silently re-enable the button | Early-return BEFORE the `try`, and set `disabled` in the markup too |
 | EA Pro Clubs API returns 500 server-side | `proclubs.ea.com/api/fc/` is behind Akamai Bot Manager; works in a browser but blocks Cloud Functions (TLS fingerprint + datacenter-IP). `bm_sv`/`_abck` JS-sensor cookie can't be replayed (22 Jun 2026) | **No server-side fix** — don't re-investigate header/cookie/retry tweaks. Use manual EAFC 26 entry; only a paid anti-bot proxy or headless browser would restore auto-fetch |
 | `showNotification()` doesn't exist | Old function name referenced in match ANY player update | Use `showToast()` instead |
 | `Alert.alert` on web | React Native pattern doesn't work in browser | Use `window.alert` on web |
