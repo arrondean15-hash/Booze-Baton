@@ -175,6 +175,20 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **24 Sep 2026**:
+  - v3.3.0: **Season Round-Up screen** - end-of-season stats in one place, reachable from the Home quick-nav (`#roundup`, visible to everyone).
+    - **Period control**: From/To date inputs (prefilled to the first and last fine date in the data) filter which fines count. A "Games basis" select switches between **This season (EAFC 26)** - `player.eafc26` - and **All time** - `calculateTotalGames(player)`.
+    - **Headline cards**: total fines £, games played, squad average £/game, fines issued, paid, still owed.
+    - **Season Awards**: Most Fined, Worst Per Game, Least Games Played, Ever Present, Cleanest Record, Most Fines (count), Best/Slowest Payer, Biggest Single Fine, Costliest Day.
+    - **Every Player table**: games, fines £, £/game, count, unpaid, paid % - every column sortable by tapping its heading.
+    - **Top Offences table**: the 10 costliest fine reasons by total £.
+    - **Copy Summary** button builds a plain-text round-up for pasting into the group chat (async clipboard API with an `execCommand` fallback).
+    - Award fairness rules: per-game awards need ≥1 game (`ROUNDUP_MIN_GAMES`), payment awards need ≥3 fines (`ROUNDUP_MIN_FINES`, falls back to all fined players if nobody qualifies), and attendance awards cover **current squad only** so a player who left mid-season can't win "Least Games Played". The second half of a paired award (least/cleanest/worst payer) is omitted when its pool has fewer than 2 entries, so best and worst are never the same person. All sorts break ties on name/date so the same winner shows on every render.
+    - Players who appear in the fines but not in `allPlayers` are still listed, tagged `(ex-squad)` with 0 games.
+    - Opening the tab loads the FULL fine history first (`autoLoadHistory().then(initRoundup)`) - the bounded realtime listener only holds the recent 200, which would undercount the season. `updateAll()` re-runs the round-up only while its screen is active.
+    - **Read-only** - no Firestore or Cloud Function writes; hosting-only change.
+    - Tested: 43 logic assertions against hand-computed fixtures (range filtering, £/game, award pools, tie-breaks, basis switch) + 21 browser assertions via Playwright (render, date filtering, column sorting, HTML-escaping of hostile player names, basis toggle). 0 console errors beyond the pre-existing Google Fonts import, which this sandbox's proxy blocks.
+
 - **03 Aug 2026 (later)**:
   - v3.2.0: Balance Check screen (super-admin only) — upload the Lloyds bank CSV (signed-Balance format) and reconcile client-side against all fines: summary cards (paid in / pot / to collect / total fines), per-player paid-vs-fined table, unmapped-payer warning, money-out list. Port of tools/reconcile.py from the leeds… booze-baton-app project repo; BANK_TO_PLAYER map baked into app.js. CSV never leaves the browser; feature is read-only (no fine writes). Quick-nav tile `#balanceNavBtn` gated in updateProfileUI. Logic verified against reconcile.py output on live data (penny-exact, CRLF-safe, HTML-escaped rendering).
 

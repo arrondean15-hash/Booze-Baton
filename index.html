@@ -125,6 +125,9 @@
                     <button class="quick-nav-btn" onclick="switchTab('baton')">
                         <i data-lucide="beer"></i><span>Baton</span>
                     </button>
+                    <button class="quick-nav-btn" onclick="switchTab('roundup')">
+                        <i data-lucide="trophy"></i><span>Round-Up</span>
+                    </button>
                     <button class="quick-nav-btn" id="balanceNavBtn" style="display: none" onclick="switchTab('balance')">
                         <i data-lucide="scale"></i><span>Balance</span>
                     </button>
@@ -552,6 +555,42 @@
                     <input type="file" id="balanceCsvInput" accept=".csv" onchange="runBalanceCheck(this.files[0])">
                 </div>
                 <div id="balanceResults"></div>
+            </div>
+
+            <!-- ==================== SEASON ROUND-UP (Secondary) ==================== -->
+            <div id="roundup" class="tab-content">
+                <div class="screen-header">
+                    <button class="icon-btn" onclick="switchTab('home')"><i data-lucide="arrow-left"></i></button>
+                    <h1 class="screen-title">Season Round-Up</h1>
+                    <div></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Period</h3>
+                    <div class="info-text" style="margin-bottom: 15px; font-size: 0.85em;">
+                        Fines are counted between these dates. Games played come from the
+                        games counter on the Manage screen.
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 130px;">
+                            <label for="roundupFrom">From</label>
+                            <input type="date" id="roundupFrom" onchange="runRoundup()">
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 130px;">
+                            <label for="roundupTo">To</label>
+                            <input type="date" id="roundupTo" onchange="runRoundup()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="roundupBasis">Games basis</label>
+                        <select id="roundupBasis" onchange="runRoundup()">
+                            <option value="season">This season (EAFC 26)</option>
+                            <option value="alltime">All time (total games)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="roundupResults"></div>
             </div>
 
             <!-- ==================== MANAGE (Secondary) ==================== -->

@@ -17,8 +17,8 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        const APP_VERSION = 'v3.2.0';
-        const LAST_UPDATED = '03 Aug 2026';
+        const APP_VERSION = 'v3.3.0';
+        const LAST_UPDATED = '24 Sep 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -1841,6 +1841,15 @@
             if (tabName === 'history' && cachedFullFines.length === 0) {
                 autoLoadHistory();
             }
+
+            // Season Round-Up needs the FULL fine history, not the bounded recent 200
+            if (tabName === 'roundup') {
+                if (cachedFullFines.length === 0) {
+                    autoLoadHistory().then(() => initRoundup());
+                } else {
+                    initRoundup();
+                }
+            }
         }
 
         async function autoLoadHistory() {
@@ -1864,6 +1873,10 @@
             updateVotingUI();
             updateRecentFinesHome();
             updateGreeting();
+            // Keep the round-up live, but only while it's the screen on show
+            if (document.getElementById('roundup')?.classList.contains('active')) {
+                runRoundup();
+            }
             const fines = getFinesForAnalytics();
             document.getElementById('totalRecords').textContent = fines.length;
         }
@@ -5820,6 +5833,387 @@
                 showToast('Failed to save mappings: ' + error.message, 'error');
             }
         }
+
+        // =====================================================
+        // SEASON ROUND-UP
+        // End-of-season stats: games played, fines, £ per game
+        // and a set of season awards. Read-only - no writes.
+        // =====================================================
+
+        const ROUNDUP_MIN_GAMES = 1;  // games needed to qualify for £/game awards
+        const ROUNDUP_MIN_FINES = 3;  // fines needed to qualify for payment-record awards
+
+        let roundupSortKey = 'total';
+        let roundupSortDir = 'desc';
+
+        function roundupEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function roundupGbp(n) {
+            return `£${(Number(n) || 0).toFixed(2)}`;
+        }
+
+        function roundupPlural(n, singular, plural) {
+            return `${n} ${n === 1 ? singular : (plural || singular + 's')}`;
+        }
+
+        function roundupGamesFor(player, basis) {
+            if (!player) return 0;
+            return basis === 'alltime'
+                ? calculateTotalGames(player)
+                : (Number(player.eafc26) || 0);
+        }
+
+        // Prefill the date range from the data, then render
+        function initRoundup() {
+            const fromEl = document.getElementById('roundupFrom');
+            const toEl = document.getElementById('roundupTo');
+            if (!fromEl || !toEl) return;
+
+            if (!fromEl.value || !toEl.value) {
+                const dates = getFinesForAnalytics()
+                    .map(f => f.date)
+                    .filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+                    .sort();
+                if (dates.length) {
+                    if (!fromEl.value) fromEl.value = dates[0];
+                    if (!toEl.value) toEl.value = dates[dates.length - 1];
+                }
+            }
+            runRoundup();
+        }
+
+        function computeRoundup(from, to, basis) {
+            const inRange = (d) => typeof d === 'string'
+                && (!from || d >= from)
+                && (!to || d <= to);
+
+            const fines = getFinesForAnalytics().filter(f => inRange(f.date));
+
+            // Every name that appears in the squad OR in the filtered fines
+            const names = new Set((allPlayers || []).map(p => p.name));
+            fines.forEach(f => { if (f.playerName) names.add(f.playerName); });
+
+            const players = [...names].map(name => {
+                const player = (allPlayers || []).find(p => p.name === name) || null;
+                const pf = fines.filter(f => f.playerName === name);
+                const total = pf.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+                const paidCount = pf.filter(f => f.paid).length;
+                const unpaid = pf.filter(f => !f.paid)
+                    .reduce((s, f) => s + (Number(f.amount) || 0), 0);
+                const games = roundupGamesFor(player, basis);
+                return {
+                    name,
+                    games,
+                    total,
+                    count: pf.length,
+                    unpaid,
+                    perGame: games > 0 ? total / games : null,
+                    paidPct: pf.length ? (paidCount / pf.length) * 100 : null,
+                    inSquad: !!player
+                };
+            });
+
+            const withFines = players.filter(p => p.count > 0);
+            const qualified = players.filter(p => p.games >= ROUNDUP_MIN_GAMES);
+            // Attendance awards only make sense for the current squad - someone who
+            // left mid-season would otherwise always "win" least games played.
+            const squad = players.filter(p => p.inSquad);
+            // Payment record needs a few fines behind it, or one settled fine wins it
+            const payers = withFines.filter(p => p.count >= ROUNDUP_MIN_FINES);
+            const payerPool = payers.length ? payers : withFines;
+
+            // Ties break on name so the same winner shows every render
+            const best = (list, fn, dir) => {
+                if (!list.length) return null;
+                return [...list].sort((a, b) => {
+                    const delta = dir === 'asc' ? fn(a) - fn(b) : fn(b) - fn(a);
+                    return delta !== 0 ? delta : a.name.localeCompare(b.name);
+                })[0];
+            };
+
+            // Fines grouped by reason
+            const byReason = {};
+            fines.forEach(f => {
+                const key = f.reason || '(no reason)';
+                if (!byReason[key]) byReason[key] = { reason: key, count: 0, total: 0 };
+                byReason[key].count += 1;
+                byReason[key].total += Number(f.amount) || 0;
+            });
+            const topReasons = Object.values(byReason)
+                .sort((a, b) => (b.total - a.total)
+                    || (b.count - a.count)
+                    || a.reason.localeCompare(b.reason))
+                .slice(0, 10);
+
+            // Fines grouped by date
+            const byDate = {};
+            fines.forEach(f => {
+                if (!f.date) return;
+                if (!byDate[f.date]) byDate[f.date] = { date: f.date, count: 0, total: 0 };
+                byDate[f.date].count += 1;
+                byDate[f.date].total += Number(f.amount) || 0;
+            });
+            const worstDay = Object.values(byDate)
+                .sort((a, b) => (b.total - a.total) || a.date.localeCompare(b.date))[0] || null;
+
+            const biggestFine = fines.length
+                ? [...fines].sort((a, b) => ((Number(b.amount) || 0) - (Number(a.amount) || 0))
+                    || String(a.date || '').localeCompare(String(b.date || '')))[0]
+                : null;
+
+            const totalFines = fines.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+            const totalUnpaid = fines.filter(f => !f.paid)
+                .reduce((s, f) => s + (Number(f.amount) || 0), 0);
+            const totalGames = players.reduce((s, p) => s + p.games, 0);
+
+            return {
+                from, to, basis,
+                fineCount: fines.length,
+                totalFines,
+                totalUnpaid,
+                totalPaid: totalFines - totalUnpaid,
+                totalGames,
+                squadPerGame: totalGames > 0 ? totalFines / totalGames : null,
+                playersFined: withFines.length,
+                players,
+                topReasons,
+                worstDay,
+                biggestFine,
+                awards: {
+                    mostFined: best(withFines, p => p.total, 'desc'),
+                    mostGames: best(squad, p => p.games, 'desc'),
+                    // The opposite half of a pair is only meaningful with 2+ in the
+                    // pool - otherwise best and worst are the same person
+                    leastGames: squad.length > 1 ? best(squad, p => p.games, 'asc') : null,
+                    worstPerGame: best(qualified, p => p.perGame || 0, 'desc'),
+                    cleanest: qualified.length > 1 ? best(qualified, p => p.perGame || 0, 'asc') : null,
+                    mostCount: best(withFines, p => p.count, 'desc'),
+                    bestPayer: best(payerPool, p => p.paidPct || 0, 'desc'),
+                    worstPayer: payerPool.length > 1 ? best(payerPool, p => p.paidPct || 0, 'asc') : null
+                }
+            };
+        }
+
+        function sortRoundup(key) {
+            if (roundupSortKey === key) {
+                roundupSortDir = roundupSortDir === 'desc' ? 'asc' : 'desc';
+            } else {
+                roundupSortKey = key;
+                roundupSortDir = key === 'name' ? 'asc' : 'desc';
+            }
+            runRoundup();
+        }
+
+        function roundupSortPlayers(players) {
+            const key = roundupSortKey;
+            const dir = roundupSortDir === 'asc' ? 1 : -1;
+            return [...players].sort((a, b) => {
+                if (key === 'name') return dir * a.name.localeCompare(b.name);
+                const av = a[key];
+                const bv = b[key];
+                // Players with no value (no games / no fines) always sink to the bottom
+                if (av == null && bv == null) return a.name.localeCompare(b.name);
+                if (av == null) return 1;
+                if (bv == null) return -1;
+                if (av === bv) return a.name.localeCompare(b.name);
+                return dir * (av - bv);
+            });
+        }
+
+        function renderRoundup(d) {
+            const container = document.getElementById('roundupResults');
+            if (!container) return;
+
+            if (d.fineCount === 0 && d.totalGames === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No fines or games in this date range</p></div>';
+                return;
+            }
+
+            // No winner (empty or single-entry pool) means the card is left out entirely
+            const award = (icon, label, name, detail) => !name ? '' : `
+                <div class="stat-card" style="text-align: left;">
+                    <div class="stat-label">${icon} ${roundupEsc(label)}</div>
+                    <div class="stat-value" style="font-size: 1.15em;">${roundupEsc(name)}</div>
+                    <div style="font-size: 0.8em; color: #A8BDE0; margin-top: 4px;">${roundupEsc(detail || '')}</div>
+                </div>`;
+
+            const a = d.awards;
+            const pg = (p) => p && p.perGame != null ? `${roundupGbp(p.perGame)} per game` : '';
+            const arrow = (key) => roundupSortKey === key
+                ? (roundupSortDir === 'asc' ? ' ▲' : ' ▼')
+                : '';
+            const th = (key, label) => `
+                <th onclick="sortRoundup('${key}')" style="cursor: pointer; user-select: none;">
+                    ${label}${arrow(key)}
+                </th>`;
+
+            const rows = roundupSortPlayers(d.players).map(p => `
+                <tr>
+                    <td>${roundupEsc(p.name)}${p.inSquad ? '' : ' <span style="color:#7B9AD4; font-size:0.85em;">(ex-squad)</span>'}</td>
+                    <td style="text-align: right;">${p.games}</td>
+                    <td style="text-align: right;">${roundupGbp(p.total)}</td>
+                    <td style="text-align: right; color: #FFCD00; font-weight: 600;">${p.perGame == null ? '-' : roundupGbp(p.perGame)}</td>
+                    <td style="text-align: right;">${p.count}</td>
+                    <td style="text-align: right; color: ${p.unpaid > 0.005 ? '#FF6B6B' : '#4CAF50'};">${roundupGbp(p.unpaid)}</td>
+                    <td style="text-align: right;">${p.paidPct == null ? '-' : p.paidPct.toFixed(0) + '%'}</td>
+                </tr>`).join('');
+
+            const reasonRows = d.topReasons.map(r => `
+                <tr>
+                    <td>${roundupEsc(r.reason)}</td>
+                    <td style="text-align: right;">${r.count}</td>
+                    <td style="text-align: right; color: #FFCD00; font-weight: 600;">${roundupGbp(r.total)}</td>
+                </tr>`).join('');
+
+            container.innerHTML = `
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-label">Total Fines</div><div class="stat-value">${roundupGbp(d.totalFines)}</div></div>
+                    <div class="stat-card"><div class="stat-label">Games Played</div><div class="stat-value">${d.totalGames}</div></div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-label">Squad Avg Per Game</div><div class="stat-value">${d.squadPerGame == null ? '-' : roundupGbp(d.squadPerGame)}</div></div>
+                    <div class="stat-card"><div class="stat-label">Fines Issued</div><div class="stat-value">${d.fineCount}</div></div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-label">Paid</div><div class="stat-value" style="color:#4CAF50;">${roundupGbp(d.totalPaid)}</div></div>
+                    <div class="stat-card"><div class="stat-label">Still Owed</div><div class="stat-value" style="color:#FF6B6B;">${roundupGbp(d.totalUnpaid)}</div></div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">🏆 Season Awards</h3>
+                    <div class="stats-grid">
+                        ${award('💸', 'Most Fined', a.mostFined && a.mostFined.name, a.mostFined ? `${roundupGbp(a.mostFined.total)} across ${roundupPlural(a.mostFined.count, 'fine')}` : '')}
+                        ${award('📉', 'Worst Per Game', a.worstPerGame && a.worstPerGame.name, pg(a.worstPerGame))}
+                        ${award('👻', 'Least Games Played', a.leastGames && a.leastGames.name, a.leastGames ? roundupPlural(a.leastGames.games, 'game') : '')}
+                        ${award('🎮', 'Ever Present', a.mostGames && a.mostGames.name, a.mostGames ? roundupPlural(a.mostGames.games, 'game') : '')}
+                        ${award('😇', 'Cleanest Record', a.cleanest && a.cleanest.name, pg(a.cleanest))}
+                        ${award('🔁', 'Most Fines (count)', a.mostCount && a.mostCount.name, a.mostCount ? roundupPlural(a.mostCount.count, 'fine') : '')}
+                        ${award('✅', 'Best Payer', a.bestPayer && a.bestPayer.name, a.bestPayer && a.bestPayer.paidPct != null ? `${a.bestPayer.paidPct.toFixed(0)}% settled` : '')}
+                        ${award('🐌', 'Slowest Payer', a.worstPayer && a.worstPayer.name, a.worstPayer && a.worstPayer.paidPct != null ? `${a.worstPayer.paidPct.toFixed(0)}% settled` : '')}
+                        ${award('💥', 'Biggest Single Fine', d.biggestFine && d.biggestFine.playerName, d.biggestFine ? `${roundupGbp(d.biggestFine.amount)} - ${d.biggestFine.reason || ''}` : '')}
+                        ${award('🔥', 'Costliest Day', d.worstDay ? formatDateDDMMYYYY(d.worstDay.date) : null, d.worstDay ? `${roundupGbp(d.worstDay.total)} from ${roundupPlural(d.worstDay.count, 'fine')}` : '')}
+                    </div>
+                    <div class="info-text" style="font-size: 0.75em; margin-top: 10px;">
+                        Per-game awards need at least ${roundupPlural(ROUNDUP_MIN_GAMES, 'game')} played;
+                        payment awards need at least ${roundupPlural(ROUNDUP_MIN_FINES, 'fine')}.
+                        Attendance awards cover the current squad only.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">📋 Every Player</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    ${th('name', 'Player')}
+                                    ${th('games', 'Games')}
+                                    ${th('total', 'Fines £')}
+                                    ${th('perGame', '£/Game')}
+                                    ${th('count', 'Count')}
+                                    ${th('unpaid', 'Unpaid')}
+                                    ${th('paidPct', 'Paid %')}
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                    <div class="info-text" style="font-size: 0.75em; margin-top: 10px;">
+                        Tap any column heading to sort.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 15px; color: #FFCD00;">💰 Top Offences</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Reason</th><th style="text-align: right;">Count</th><th style="text-align: right;">Total</th></tr>
+                            </thead>
+                            <tbody>${reasonRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <button class="btn btn-secondary" onclick="copyRoundupSummary()">Copy Summary</button>
+                    <div class="info-text" style="font-size: 0.75em; margin-top: 10px;">
+                        Copies a plain-text round-up ready to paste into the group chat.
+                    </div>
+                </div>
+            `;
+        }
+
+        function runRoundup() {
+            const fromEl = document.getElementById('roundupFrom');
+            const toEl = document.getElementById('roundupTo');
+            const basisEl = document.getElementById('roundupBasis');
+            if (!fromEl || !toEl || !basisEl) return;
+
+            const data = computeRoundup(fromEl.value, toEl.value, basisEl.value);
+            renderRoundup(data);
+            updateScopeIndicators();
+        }
+
+        function buildRoundupSummary(d) {
+            const a = d.awards;
+            const lines = [];
+            const range = `${d.from ? formatDateDDMMYYYY(d.from) : 'start'} – ${d.to ? formatDateDDMMYYYY(d.to) : 'today'}`;
+            lines.push(`BENIDORM UNITED - SEASON ROUND-UP (${range})`);
+            lines.push('');
+            lines.push(`Total fines: ${roundupGbp(d.totalFines)} from ${d.fineCount} fines`);
+            lines.push(`Games played: ${d.totalGames}`);
+            if (d.squadPerGame != null) lines.push(`Squad average: ${roundupGbp(d.squadPerGame)} per game`);
+            lines.push(`Still owed: ${roundupGbp(d.totalUnpaid)}`);
+            lines.push('');
+            lines.push('AWARDS');
+            if (a.mostFined) lines.push(`💸 Most fined: ${a.mostFined.name} - ${roundupGbp(a.mostFined.total)}`);
+            if (a.worstPerGame) lines.push(`📉 Worst per game: ${a.worstPerGame.name} - ${roundupGbp(a.worstPerGame.perGame)}`);
+            if (a.leastGames) lines.push(`👻 Least games: ${a.leastGames.name} - ${roundupPlural(a.leastGames.games, 'game')}`);
+            if (a.mostGames) lines.push(`🎮 Ever present: ${a.mostGames.name} - ${roundupPlural(a.mostGames.games, 'game')}`);
+            if (a.cleanest) lines.push(`😇 Cleanest: ${a.cleanest.name} - ${roundupGbp(a.cleanest.perGame)} per game`);
+            if (d.biggestFine) lines.push(`💥 Biggest fine: ${d.biggestFine.playerName} - ${roundupGbp(d.biggestFine.amount)} (${d.biggestFine.reason || ''})`);
+            if (d.worstDay) lines.push(`🔥 Costliest day: ${formatDateDDMMYYYY(d.worstDay.date)} - ${roundupGbp(d.worstDay.total)}`);
+            lines.push('');
+            lines.push('TABLE (player - games - fines - £/game)');
+            roundupSortPlayers(d.players).forEach(p => {
+                lines.push(`${p.name} - ${p.games} - ${roundupGbp(p.total)} - ${p.perGame == null ? 'n/a' : roundupGbp(p.perGame)}`);
+            });
+            return lines.join('\n');
+        }
+
+        async function copyRoundupSummary() {
+            const fromEl = document.getElementById('roundupFrom');
+            const toEl = document.getElementById('roundupTo');
+            const basisEl = document.getElementById('roundupBasis');
+            if (!fromEl || !toEl || !basisEl) return;
+
+            const text = buildRoundupSummary(computeRoundup(fromEl.value, toEl.value, basisEl.value));
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Round-up copied to clipboard', 'success');
+            } catch (error) {
+                console.error('Clipboard write failed:', error);
+                // Fallback for browsers that block the async clipboard API
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast(ok ? 'Round-up copied to clipboard' : 'Could not copy - long-press to select instead', ok ? 'success' : 'error');
+            }
+        }
+
+        window.initRoundup = initRoundup;
+        window.runRoundup = runRoundup;
+        window.sortRoundup = sortRoundup;
+        window.copyRoundupSummary = copyRoundupSummary;
 
         // Make Pro Clubs functions globally available
         window.logNewMatches = logNewMatches;
