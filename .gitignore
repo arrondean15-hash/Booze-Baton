@@ -36,3 +36,8 @@ __pycache__/
 
 # Season backups (personal data — never commit)
 backups/
+
+# Local working notes (not for the public repo)
+MEMORY/
+EA-API-ISSUE-REPORT.md
+.playwright-mcp/
