@@ -1,3 +1,4 @@
+// Runtime: Node.js 22 (firebase.json + package.json engines) — Node 20 was decommissioned Oct 2026.
 const functions = require('firebase-functions');
 const fetch = require('node-fetch');
 const admin = require('firebase-admin');
@@ -16,29 +17,27 @@ const API_BASE_URL = 'https://v3.football.api-sports.io/';
 
 // EA Pro Clubs API configuration
 const EA_API_BASE_URL = 'https://proclubs.ea.com/api/fc/';
-const EA_CLUB_ID = '21853'; // STALE — was Benidorm United on FC25, now a different club on FC26
+const EA_CLUB_ID = '525055'; // Benidorm United on EAFC 27 (was 21853 on FC25 — re-issued to another club on FC26)
 const EA_PLATFORM = 'common-gen5'; // PS5/Xbox Series X|S
 
 // Master kill switch for every EA Pro Clubs call.
 //
-// Turned off 20 Sep 2026: EA re-issued club IDs for EAFC 26 and club 21853 now belongs to
-// someone else. With it live, `logProClubsMatches` wrote 4 of that club's matches into our
-// history (players maiss99 / Bsaghair / most_j1349j), and `relogAllMatches` would have
-// deleted all 502 genuine matches and logged nothing back.
+// Off 20 Sep – 8 Oct 2026: EA re-issued club IDs for EAFC 26 and club 21853 became someone
+// else's (4 of their matches got logged as ours). Re-enabled 8 Oct 2026 for EAFC 27 on club
+// 525055, verified by gamertag overlap (7 of our 8 mapped tags in its last 10 matches).
 //
-// TO RE-ENABLE once Benidorm United exists on EAFC 26:
-//   1. Set EA_CLUB_ID above to the new club ID.
-//   2. Set EA_SYNC_ENABLED to true.
-//   3. Deploy functions, then run the manual "Log Matches" ONCE and check what it logged
-//      before letting the 1am scheduled job run.
-const EA_SYNC_ENABLED = false;
+// EA re-issues club IDs every title. Next new game:
+//   1. Set EA_SYNC_ENABLED to false and deploy BEFORE anyone plays on the new title.
+//   2. Find the new ID via allTimeLeaderboard/search?clubName=Benidorm%20United (browser only —
+//      Akamai blocks curl) and check its members against config/playerMappings.
+//   3. Set EA_CLUB_ID, re-enable, deploy, run "Log Matches" ONCE and check what it logged.
+const EA_SYNC_ENABLED = true;
 
 // Standard refusal used by every EA-backed endpoint while the sync is paused.
 function eaSyncDisabled(res) {
   functions.logger.warn('EA sync is disabled (EA_SYNC_ENABLED = false) — request refused');
   sendError(res, 503, 'ea-sync-disabled',
-    'EA sync is paused. Club ID 21853 is no longer Benidorm United on EAFC 26, so EA data ' +
-    'would belong to another team. Enter games manually until the club is set up on the new game.');
+    'EA sync is paused while the club is moved to a new game. Enter games manually for now.');
 }
 
 // Headers to mimic browser request (required by EA's WAF)

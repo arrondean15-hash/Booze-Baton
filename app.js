@@ -17,14 +17,14 @@
         const googleProvider = new GoogleAuthProvider();
 
         // App version - UPDATE THESE BEFORE EACH DEPLOY
-        // Mirrors EA_SYNC_ENABLED in functions/index.js. While false, every EA-backed
+        // Mirrors EA_SYNC_ENABLED in functions/index.js (on since 8 Oct 2026, club 525055 on EAFC 27). While false, every EA-backed
         // control is disabled in markup AND guarded here, because each of those handlers
         // ends in a `finally` that sets btn.disabled = false — which would silently undo
         // the disabled state if one ever ran. Guards must return BEFORE the try.
-        const EA_FEATURES_ENABLED = false;
+        const EA_FEATURES_ENABLED = true;
 
-        const APP_VERSION = 'v3.4.0';
-        const LAST_UPDATED = '20 Sep 2026';
+        const APP_VERSION = 'v4.0.0';
+        const LAST_UPDATED = '8 Oct 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -1665,11 +1665,8 @@
         }
 
         function calculateTotalGames(player) {
-            const eafc25 = player.eafc25 || 0;
-            const season2425 = player.season2425 || 0;
-            const eafc26 = player.eafc26 || 0;
-            const adjustment = player.adjustment || 0;
-            return eafc25 - season2425 + eafc26 + adjustment;
+            // EAFC 27 fresh start (8 Oct 2026): older seasons are archived in the backup CSVs.
+            return (player.eafc27 || 0) + (player.adjustment || 0);
         }
 
         function updateManagePlayersTable() {
@@ -1684,13 +1681,11 @@
             const voidCounts = getVoidCountsByAppPlayer();
 
             table.innerHTML = allPlayers.map(player => {
-                const eafc25 = player.eafc25 || 0;
-                const season2425 = player.season2425 || 0;
-                const eafc26 = player.eafc26 || 0;
+                const eafc27 = player.eafc27 || 0;
                 const adjustment = player.adjustment || 0;
                 const total = calculateTotalGames(player);
                 const voids = voidCounts[player.name] || 0;
-                const inclVoid = eafc26 + voids;
+                const inclVoid = eafc27 + voids;
                 // Signed display so the sum reads as real arithmetic, not four loose numbers.
                 const sign = n => (n < 0 ? '\u2212' : '+') + Math.abs(n);
                 return `
@@ -1699,25 +1694,23 @@
                         <div class="games-tracking">
                             <div class="games-row">
                                 <div style="flex: 1;">
-                                    <label style="font-size: 0.85em;">EAFC 26</label>
-                                    <input type="number" class="games-input" value="${eafc26}"
-                                           onchange="updateGamesField('${player.name}', 'eafc26', this.value)">
+                                    <label style="font-size: 0.85em;">EAFC 27</label>
+                                    <input type="number" class="games-input" value="${eafc27}"
+                                           onchange="updateGamesField('${player.name}', 'eafc27', this.value)">
                                 </div>
                             </div>
                             <div class="calc-breakdown">
                                 <div class="calc-title">How this total is worked out</div>
-                                <div class="calc-row"><span>EAFC 25</span><span>${eafc25}</span></div>
-                                <div class="calc-row"><span>Season 24/25</span><span>${sign(-season2425)}</span></div>
-                                <div class="calc-row"><span>EAFC 26</span><span>${sign(eafc26)}</span></div>
+                                <div class="calc-row"><span>EAFC 27</span><span>${eafc27}</span></div>
                                 <div class="calc-row"><span>Adjustment</span><span>${sign(adjustment)}</span></div>
                                 <div class="calc-row calc-sum"><span>Total Games</span><span>${total}</span></div>
                             </div>
                             <div class="games-voids">
                                 <span>Void games: <b style="color: ${voids > 0 ? '#e74c3c' : '#A8BDE0'};">${voids}</b></span>
-                                <span>EAFC 26 incl. voids: <b style="color: #6ECEB2;">${inclVoid}</b></span>
+                                <span>EAFC 27 incl. voids: <b style="color: #6ECEB2;">${inclVoid}</b></span>
                             </div>
                             <div class="calc-note">
-                                EAFC 26 (${eafc26}) already has ${voids} void game${voids === 1 ? '' : 's'} taken off.
+                                EAFC 27 (${eafc27}) already has ${voids} void game${voids === 1 ? '' : 's'} taken off.
                                 Voids are matches marked "Void" in Match History and don't count towards fines.
                             </div>
                             <div class="games-total">
@@ -1744,18 +1737,6 @@
                     <div class="player-card">
                         <div class="player-name">${player.name}</div>
                         <div class="games-tracking">
-                            <div class="games-row">
-                                <div>
-                                    <label style="font-size: 0.85em;">EAFC 25</label>
-                                    <input type="number" class="games-input" value="${player.eafc25 || 0}"
-                                           onchange="updateGamesField('${player.name}', 'eafc25', this.value)">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.85em;">Season 24/25</label>
-                                    <input type="number" class="games-input" value="${player.season2425 || 0}"
-                                           onchange="updateGamesField('${player.name}', 'season2425', this.value)">
-                                </div>
-                            </div>
                             <div class="games-row">
                                 <div>
                                     <label style="font-size: 0.85em;">Adjustment (+/-)</label>
@@ -1797,9 +1778,7 @@
 
             allPlayers.push({
                 name,
-                eafc25: 0,
-                season2425: 0,
-                eafc26: 0,
+                eafc27: 0,
                 adjustment: 0
             });
             await savePlayers();
@@ -2653,6 +2632,10 @@
                 const dateVal = latest.matchDate || latest.date || null;
                 if (batonCurrentTeam) batonCurrentTeam.textContent = holderName;
                 if (batonCurrentDate) batonCurrentDate.textContent = dateVal ? `Updated: ${formatDateDDMMYYYY(dateVal)}` : 'No date';
+            } else if (currentBatonHolder && currentBatonHolder.holderTeamName) {
+                // History is wiped at each new game, but baton_current carries the holder over
+                if (batonCurrentTeam) batonCurrentTeam.textContent = currentBatonHolder.holderTeamName;
+                if (batonCurrentDate) batonCurrentDate.textContent = 'Carried over from last season';
             } else {
                 if (batonCurrentTeam) batonCurrentTeam.textContent = '-';
                 if (batonCurrentDate) batonCurrentDate.textContent = 'No baton history';
@@ -3525,6 +3508,181 @@
             a.download = `booze-baton-${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
         }
+
+        // ==================== GAMES / MATCH DATA EXPORTS ====================
+        // Tidy CSV exports: one header row, one record per row, no report or footnote
+        // rows — so the files drop straight into Excel/Sheets and pivot cleanly.
+        // All read-only, all from data already loaded in the browser. No EA call.
+
+        // Same escaping rule as exportData(): quote anything containing a comma, quote,
+        // CR or LF, doubling embedded quotes. Opponent names like "Cs U23s, reserves"
+        // would otherwise split across columns.
+        function csvField(value) {
+            let s = String(value ?? '');
+            // Excel and Sheets execute a cell starting with = + - @ as a formula. Only
+            // guard actual strings — numbers must stay numeric so Adjustment -6 and
+            // Goal Difference -1 don't turn into text.
+            if (typeof value === 'string' && /^[=+\-@\t\r]/.test(s)) {
+                s = "'" + s;
+            }
+            return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        }
+
+        function buildCsv(header, rows) {
+            return [header, ...rows]
+                .map(row => row.map(csvField).join(','))
+                .join('\r\n') + '\r\n';
+        }
+
+        // Appends and revokes, unlike the older exportData() download.
+        function downloadCsv(filename, csv) {
+            // BOM so Excel reads UTF-8 gamertags correctly instead of mojibake.
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function exportStamp() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function matchIsVoid(match) {
+            return match.anyPlayer === 'Void';
+        }
+
+        // Table 1 — one row per player, every component of the total plus the result.
+        function exportGamesPlayedCsv() {
+            if (!allPlayers || allPlayers.length === 0) {
+                showToast('No players to export', 'error');
+                return;
+            }
+            // Void columns come from the match cache. Without this guard an early click
+            // exports every player with 0 voids AND shows a success toast — a file that
+            // looks right and isn't.
+            if (!loggedMatchesCache || !loggedMatchesCache.matches) {
+                showToast('Match history has not loaded yet — try again in a moment', 'error');
+                return;
+            }
+
+            const voidCounts = getVoidCountsByAppPlayer();
+            const appNameToGamertag = {};
+            for (const [gamertag, appName] of Object.entries(playerMappings)) {
+                appNameToGamertag[appName] = gamertag;
+            }
+
+            const header = [
+                'Player', 'EA Gamertag',
+                'EAFC 27 Excl Voids', 'Adjustment',
+                'Void Games', 'EAFC 27 Incl Voids',
+                'Total Games', 'Calculation'
+            ];
+
+            const rows = allPlayers.map(player => {
+                const eafc27 = player.eafc27 || 0;
+                const adjustment = player.adjustment || 0;
+                const voids = voidCounts[player.name] || 0;
+                const total = calculateTotalGames(player);
+                const signed = n => (n < 0 ? '- ' : '+ ') + Math.abs(n);
+                return [
+                    player.name,
+                    appNameToGamertag[player.name] || '',
+                    eafc27, adjustment,
+                    voids, eafc27 + voids,
+                    total,
+                    `${eafc27} ${signed(adjustment)} = ${total}`
+                ];
+            });
+
+            downloadCsv(`booze-baton-games-played-${exportStamp()}.csv`, buildCsv(header, rows));
+            showToast(`Exported ${rows.length} players`, 'success');
+        }
+
+        // Table 2 — one row per logged match.
+        function exportMatchesCsv() {
+            const matches = (loggedMatchesCache && loggedMatchesCache.matches) || [];
+            if (matches.length === 0) {
+                showToast('Match history has not loaded yet — try again in a moment', 'error');
+                return;
+            }
+
+            const header = [
+                'Match ID', 'Date', 'Time', 'Match Type', 'Result',
+                'Our Score', 'Opponent Score', 'Goal Difference', 'Opponent',
+                'ANY Player', 'Void', 'Squad Size', 'Players'
+            ];
+
+            const rows = matches.map(m => {
+                const d = m.timestamp ? new Date(m.timestamp) : null;
+                const players = (m.players || []).map(p => p.name);
+                return [
+                    m.matchId,
+                    d ? d.toISOString().split('T')[0] : '',
+                    d ? d.toISOString().split('T')[1].slice(0, 8) : '',
+                    m.matchType || '',
+                    m.result || '',
+                    m.ourScore ?? '',
+                    m.opponentScore ?? '',
+                    (m.ourScore ?? 0) - (m.opponentScore ?? 0),
+                    m.opponentName || '',
+                    m.anyPlayer || '',
+                    matchIsVoid(m) ? 'TRUE' : 'FALSE',
+                    players.length,
+                    players.join('; ')
+                ];
+            });
+
+            downloadCsv(`booze-baton-matches-${exportStamp()}.csv`, buildCsv(header, rows));
+            showToast(`Exported ${rows.length} matches`, 'success');
+        }
+
+        // Table 3 — long format, one row per player per match. This is the one to pivot:
+        // games per player, ratings over time, void exclusions, MOM counts.
+        function exportMatchAppearancesCsv() {
+            const matches = (loggedMatchesCache && loggedMatchesCache.matches) || [];
+            if (matches.length === 0) {
+                showToast('Match history has not loaded yet — try again in a moment', 'error');
+                return;
+            }
+
+            const header = [
+                'Match ID', 'Date', 'Time', 'Match Type', 'Result',
+                'Our Score', 'Opponent Score', 'Opponent', 'ANY Player', 'Void',
+                'EA Gamertag', 'Player', 'Position', 'Rating', 'Man Of The Match'
+            ];
+
+            const rows = [];
+            for (const m of matches) {
+                const d = m.timestamp ? new Date(m.timestamp) : null;
+                const date = d ? d.toISOString().split('T')[0] : '';
+                const time = d ? d.toISOString().split('T')[1].slice(0, 8) : '';
+                const isVoid = matchIsVoid(m) ? 'TRUE' : 'FALSE';
+                for (const p of (m.players || [])) {
+                    rows.push([
+                        m.matchId, date, time, m.matchType || '', m.result || '',
+                        m.ourScore ?? '', m.opponentScore ?? '', m.opponentName || '',
+                        m.anyPlayer || '', isVoid,
+                        p.name,
+                        playerMappings[p.name] || '(unmapped)',
+                        p.position || '',
+                        p.rating ?? '',
+                        p.mom ? 'TRUE' : 'FALSE'
+                    ]);
+                }
+            }
+
+            downloadCsv(`booze-baton-match-appearances-${exportStamp()}.csv`, buildCsv(header, rows));
+            showToast(`Exported ${rows.length} appearances`, 'success');
+        }
+
+        window.exportGamesPlayedCsv = exportGamesPlayedCsv;
+        window.exportMatchesCsv = exportMatchesCsv;
+        window.exportMatchAppearancesCsv = exportMatchAppearancesCsv;
 
         // ==================== BALANCE CHECK (super admin) ====================
         // Client-side port of tools/reconcile.py — the bank CSV is parsed in the
@@ -5628,14 +5786,14 @@
 
         // EA's Pro Clubs API is behind Akamai bot protection that blocks
         // server-side requests (see CLAUDE.md). When that's the cause, show a
-        // friendly nudge to the manual EAFC 26 field instead of a raw 500.
+        // friendly nudge to the manual EAFC 27 field instead of a raw 500.
         function isEaBotBlock(error) {
             const m = (error && error.message) || '';
             return /EA API request failed|Pro Clubs squad|fetch Pro Clubs/i.test(m);
         }
 
-        // EA sync is deliberately paused server-side (EA_SYNC_ENABLED = false) because
-        // club 21853 is no longer Benidorm United on EAFC 26. Different cause to the bot
+        // EA sync can be deliberately paused server-side (EA_SYNC_ENABLED = false), e.g. while
+        // the club moves to a new game and its EA club ID changes. Different cause to the bot
         // block above, so say so plainly rather than blaming EA's anti-bot protection.
         function isEaSyncDisabled(error) {
             return (error && error.code) === 'ea-sync-disabled';
@@ -5714,10 +5872,10 @@
             } catch (error) {
                 console.error('Failed to fetch EA stats:', error);
                 if (isEaSyncDisabled(error)) {
-                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⏸️ EA sync is paused on purpose.<br><br><span style="color:#A8BDE0;">EA gave our old club ID (21853) to another team on EAFC 26, so fetching would pull <b>their</b> stats. Sync stays off until Benidorm United is set up on the new game.<br><br>Use the <b>EAFC 26</b> field above to enter games manually.</span></div>`;
+                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⏸️ EA sync is paused on purpose.<br><br><span style="color:#A8BDE0;">It's switched off while the club moves to a new game.<br><br>Use the <b>EAFC 27</b> field above to enter games manually.</span></div>`;
                     showToast('EA sync is paused — enter games manually', 'info');
                 } else if (isEaBotBlock(error)) {
-                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⚠️ EA is blocking automated fetches right now (their anti-bot protection — not an app bug).<br><br><span style="color:#A8BDE0;">Enter games manually in the <b>EAFC 26</b> field above — it works exactly the same.</span></div>`;
+                    container.innerHTML = `<div style="color: #FFCD00; padding: 12px; line-height: 1.5;">⚠️ EA is blocking automated fetches right now (their anti-bot protection — not an app bug).<br><br><span style="color:#A8BDE0;">Enter games manually in the <b>EAFC 27</b> field above — it works exactly the same.</span></div>`;
                     showToast('EA is blocking auto-fetch — use manual entry', 'error');
                 } else {
                     container.innerHTML = `<div style="color: #ff6b6b; padding: 10px;">Failed to load: ${error.message}</div>`;
@@ -5730,8 +5888,8 @@
         }
         window.fetchEAGamesPlayed = fetchEAGamesPlayed;
 
-        // Auto-update EAFC 26 games from EA data (excluding void matches)
-        async function autoUpdateEAFC26() {
+        // Auto-update EAFC 27 games from EA data (excluding void matches)
+        async function autoUpdateEAFC27() {
             if (!EA_FEATURES_ENABLED) return showEaPausedNotice();
             const btn = document.getElementById('autoUpdateBtn');
 
@@ -5763,7 +5921,7 @@
 
                 let updatedCount = 0;
 
-                // Update each mapped player's EAFC 26 field
+                // Update each mapped player's EAFC 27 field
                 for (const member of data.members) {
                     const appPlayerName = playerMappings[member.name];
                     if (!appPlayerName) continue;
@@ -5775,7 +5933,7 @@
                     const voidCount = voidCountByEaName[member.name] || 0;
                     const adjustedGames = member.gamesPlayed - voidCount;
 
-                    player.eafc26 = adjustedGames;
+                    player.eafc27 = adjustedGames;
                     updatedCount++;
                 }
 
@@ -5792,17 +5950,17 @@
                 console.error('Failed to auto-update:', error);
                 showToast(
                     isEaSyncDisabled(error)
-                        ? 'EA sync is paused (old club ID belongs to another team) — enter games manually'
+                        ? 'EA sync is paused — enter games manually'
                         : isEaBotBlock(error)
-                            ? 'EA is blocking auto-fetch — enter games manually in the EAFC 26 field'
+                            ? 'EA is blocking auto-fetch — enter games manually in the EAFC 27 field'
                             : ('Failed to auto-update: ' + error.message),
                     isEaSyncDisabled(error) ? 'info' : 'error');
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Auto-Update EAFC 26';
+                btn.textContent = 'Auto-Update EAFC 27';
             }
         }
-        window.autoUpdateEAFC26 = autoUpdateEAFC26;
+        window.autoUpdateEAFC27 = autoUpdateEAFC27;
 
         // ==========================================
         // PLAYER NAME MAPPING FUNCTIONS

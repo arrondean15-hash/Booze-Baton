@@ -33,3 +33,6 @@ Thumbs.db
 # Python (local tools/)
 __pycache__/
 *.pyc
+
+# Season backups (personal data — never commit)
+backups/

@@ -38,7 +38,7 @@ A tracking concept where the "baton" passes between players. History stored in `
 Daily best/worst player voting. Stored in `dailyVotes/{date}` collection.
 
 ### EA Pro Clubs Integration
-Fetches match data from EA's Pro Clubs API for club ID `21853` (Benidorm United) on platform `common-gen5` (PS5/Xbox Series X|S).
+Fetches match data from EA's Pro Clubs API for club ID `525055` (Benidorm United, **EAFC 27**) on platform `common-gen5` (PS5/Xbox Series X|S). EA re-issues club IDs every title — see the EAFC 27 entry in Recent Changes for the rollover routine.
 
 ## Cloud Functions
 
@@ -166,7 +166,7 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 ### EA Pro Clubs Stats (Manage Tab)
 - Fetches live games played from EA servers
 - Shows: Player, EA Games, Void count, Adjusted total
-- Auto-Update EAFC 26 button syncs EA games to player records (excludes void matches)
+- Auto-Update EAFC 27 button syncs EA games to player records (excludes void matches)
 - Only shows players with mappings configured in Settings
 
 ### Player Selection (Add Fine)
@@ -174,6 +174,26 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 - Multi-select enabled for bulk fines
 
 ## Recent Changes
+
+- **08 Oct 2026**:
+  - **v4.0.0: EAFC 27 season rollover** (data reset + functions + hosting deployed)
+    - New club: **`525055`** found via `allTimeLeaderboard/search?clubName=Benidorm%20United` in a real
+      browser (Akamai 403s curl from a Mac; GCP egress works). Verified by gamertag overlap: all 8 mapped tags
+      in its members list. Le Dump's gamertag changed `AzZa DeAn0` → `AzZa_DeAn0` (mapping updated).
+    - `EA_SYNC_ENABLED` / `EA_FEATURES_ENABLED` back to `true`; paused banners and `disabled` attrs removed;
+      Cloud Scheduler job **resumed** after a one-off run logged 10 matches, 0 rejected.
+    - Games model is now `{ name, eafc27, adjustment }`, total = `eafc27 + adjustment`. EAFC 25 / Season
+      24/25 / EAFC 26 fields are gone from the UI (archived in the backup). Seeded from EA members/stats.
+    - Data reset (`tools/season/reset-eafc27.js`): deleted 1366 *paid* fines dated before 27 Sep 2026, all 502
+      proClubsMatches, 18 dailyVotes, 19 baton history. **Kept**: 17 fines dated ≥ 27 Sep plus 22 older
+      **unpaid** fines (£44.50, still owed — Arron's call), `baton_current` (FC Sion). 39 fines, £76.50 unpaid.
+    - Backups (gitignored, local only): `backups/eafc26-final-2026-10-08/` and `backups/pre-reset-2026-10-08/`
+      — full JSON + CSVs. Undo: `node tools/season/restore.js <dir> --apply [--only=fines]`.
+    - Baton tracker falls back to `currentBatonHolder` when history is empty.
+    - Functions runtime Node 20 → **22** (`firebase.json` `runtime` overrides `package.json` engines — change both;
+      a runtime-only change is "Skipped (No changes detected)" until the source hash changes).
+    - Includes the v3.5.0 CSV export card (Games Played / Matches / Match Appearances) from 20 Sep.
+    - EA only returns a club's last 10 matches, so EAFC 27 games 1–14 were never in Match History.
 
 - **20 Sep 2026**:
   - **EA re-issued club IDs for EAFC 26 — club `21853` is no longer Benidorm United.**
@@ -329,7 +349,7 @@ These patterns have caused real bugs — check for them when debugging:
 
 ## Known Deprecations
 
-- **Node.js 20**: Deprecated April 2026, decommissioned October 2026 — upgrade to Node.js 22
+- **Node.js 20**: done — functions run on Node.js 22 since 8 Oct 2026
 - **functions.config()**: Deprecated March 2026 — migrate to params package
 
 ## Design System

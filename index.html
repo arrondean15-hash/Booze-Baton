@@ -573,25 +573,36 @@
                 <div class="card">
                     <h3 style="margin-bottom: 10px; color: #FFCD00;">Update Games Played</h3>
                     <div class="info-text" style="margin-bottom: 15px;">
-                        Update current season games played (EAFC 26 only)
+                        Update current season games played (EAFC 27 only)
                     </div>
                     <div id="managePlayersTable"></div>
                 </div>
 
                 <div class="card">
-                    <h3 style="margin-bottom: 10px; color: #FFCD00;">EA Pro Clubs Stats</h3>
-                    <div class="ea-paused-banner">
-                        &#9208; <b>EA sync is switched off</b><br>
-                        EA gave our old club ID (21853) to another team on EAFC 26, so fetching
-                        would pull <b>their</b> stats into our records. It stays off until
-                        Benidorm United is set up on the new game.
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">Export Data</h3>
+                    <div class="info-text" style="margin-bottom: 15px;">
+                        Plain CSV, one row per record &mdash; opens straight into Excel or Sheets and pivots cleanly.
                     </div>
+                    <div class="export-grid">
+                        <button class="btn btn-secondary" onclick="exportGamesPlayedCsv()">Games Played + Calculations</button>
+                        <div class="export-hint">One row per player: EAFC 27, Adjustment, voids, total, and the calculation written out.</div>
+
+                        <button class="btn btn-secondary" onclick="exportMatchesCsv()">Matches</button>
+                        <div class="export-hint">One row per logged match: date, result, score, opponent, ANY player, void flag, squad.</div>
+
+                        <button class="btn btn-secondary" onclick="exportMatchAppearancesCsv()">Match Appearances</button>
+                        <div class="export-hint">One row per player per match, with rating, position and MOM. Best for pivot tables.</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 10px; color: #FFCD00;">EA Pro Clubs Stats</h3>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn" onclick="fetchEAGamesPlayed()" id="fetchEABtn" disabled>Fetch from EA</button>
-                        <button class="btn btn-secondary" onclick="autoUpdateEAFC26()" id="autoUpdateBtn" disabled>Auto-Update EAFC 26</button>
+                        <button class="btn" onclick="fetchEAGamesPlayed()" id="fetchEABtn">Fetch from EA</button>
+                        <button class="btn btn-secondary" onclick="autoUpdateEAFC27()" id="autoUpdateBtn">Auto-Update EAFC 27</button>
                     </div>
                     <div class="info-text" style="margin-top: 10px; font-size: 0.8em;">
-                        Enter games manually in the <b>EAFC 26</b> field above until EA sync is back on.
+                        Auto-Update pulls games from EA club 525055 (Benidorm United, EAFC 27), minus void matches.
                     </div>
                     <div id="eaGamesPlayedList" style="margin-top: 15px;"></div>
                 </div>
@@ -872,7 +883,7 @@
                 <div class="card">
                     <h3 style="margin-bottom: 10px; color: #FFCD00;">Historic Games Tracking</h3>
                     <div class="info-text" style="margin-bottom: 15px;">
-                        Total = (EAFC 25) - (Season 24/25) + (EAFC 26) + (Adjustment)
+                        Total = (EAFC 27) + (Adjustment)
                     </div>
                     <div id="settingsPlayersTable"></div>
                 </div>
@@ -969,14 +980,8 @@
 
                 <div class="card" style="text-align: center; margin-bottom: 15px;">
                     <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                        <button class="btn btn-success" onclick="logNewMatches()" id="logMatchesBtn" disabled>Log New Matches</button>
-                        <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn" disabled>Refresh History</button>
-                    </div>
-                    <div class="ea-paused-banner" style="margin-top: 12px;">
-                        &#9208; <b>Match logging is switched off</b><br>
-                        The 1am auto-log is stopped too. Our club no longer exists under the old
-                        EA club ID, so logging would pull another team's games in. The
-                        502 matches already saved are safe and still shown below.
+                        <button class="btn btn-success" onclick="logNewMatches()" id="logMatchesBtn">Log New Matches</button>
+                        <button class="btn btn-secondary" onclick="loadLoggedMatches()" id="refreshMatchesBtn">Refresh History</button>
                     </div>
                     <div id="matchesLastUpdated" style="font-size: 0.85em; color: #7B9AD4; margin-top: 8px;"></div>
                 </div>
