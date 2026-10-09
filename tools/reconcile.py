@@ -35,20 +35,20 @@ OUT = os.path.expanduser("~/Downloads")
 
 # --- CONFIG: bank statement name (UPPER substring) -> app playerName (gamertag) ---
 BANK_TO_PLAYER = {
-    "A DEAN":           "Le Dump",
-    "DANNY ROWE":       "Erik Eriksson",
+    "A DEAN":           "Baldacourt",
+    "DANNY ROWE":       "D. Benigul",
     "CHARLIE SKELDING": "Fredu",
-    "HOMER":            "J3",
-    "GLENN HALL":       "Narreh",
+    "HOMER":            "Omar",
+    "GLENN HALL":       "narreh",
     "BIRDSALL":         "Edu",
-    "ADAM BILYJ":       "Jim Blackpool",
-    "ASHLEY JACKSON":   "Ash",
+    "ADAM BILYJ":       "J. Blackpool",
+    "ASHLEY JACKSON":   "Diggy Dawg",
 }
 # app playerName -> nice display name (for the table + graphics)
 PLAYER_NAMES = {
-    "Le Dump": "Arron Dean", "Erik Eriksson": "Danny Rowe", "Fredu": "Charlie Skelding",
-    "J3": "Jack Homer", "Narreh": "Glenn Hall", "Edu": "Matty Birdsall",
-    "Jim Blackpool": "Adam Bilyj", "Ash": "Ashley Jackson",
+    "Baldacourt": "Arron Dean", "D. Benigul": "Danny Rowe", "Fredu": "Charlie Skelding",
+    "Omar": "Jack Homer", "narreh": "Glenn Hall", "Edu": "Matty Birdsall",
+    "J. Blackpool": "Adam Bilyj", "Diggy Dawg": "Ashley Jackson",
 }
 PAY_TO = "Sort 11-00-01 · Acc 10560318"   # shown on the reminder graphic
 

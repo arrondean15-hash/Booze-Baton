@@ -175,6 +175,12 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **09 Oct 2026**:
+  - **v4.0.1: players renamed to EAFC 27 in-game pro names** (EA members/stats `proName`, club 525055):
+    Narreh→narreh, Jim Blackpool→J. Blackpool, Le Dump→Baldacourt, Ash→Diggy Dawg, J3→Omar,
+    Erik Eriksson→D. Benigul (Edu, Fredu unchanged). Done with `tools/season/rename-players.js` across
+    fines, users, playerNames (doc ids moved), config/players, config/playerMappings, proClubsMatches.anyPlayer;
+    bank maps updated in app.js + tools/reconcile.py. Backup: `backups/pre-rename-2026-10-09`.
 - **08 Oct 2026**:
   - **v4.0.0: EAFC 27 season rollover** (data reset + functions + hosting deployed)
     - New club: **`525055`** found via `allTimeLeaderboard/search?clubName=Benidorm%20United` in a real

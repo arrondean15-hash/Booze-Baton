@@ -23,8 +23,8 @@
         // the disabled state if one ever ran. Guards must return BEFORE the try.
         const EA_FEATURES_ENABLED = true;
 
-        const APP_VERSION = 'v4.0.0';
-        const LAST_UPDATED = '8 Oct 2026';
+        const APP_VERSION = 'v4.0.1';
+        const LAST_UPDATED = '9 Oct 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -3689,14 +3689,14 @@
         // browser and never uploaded. Read-only: no fines are marked paid here.
         // Bank statement name (upper-case substring) -> app playerName
         const BANK_TO_PLAYER = {
-            'A DEAN': 'Le Dump',
-            'DANNY ROWE': 'Erik Eriksson',
+            'A DEAN': 'Baldacourt',
+            'DANNY ROWE': 'D. Benigul',
             'CHARLIE SKELDING': 'Fredu',
-            'HOMER': 'J3',
-            'GLENN HALL': 'Narreh',
+            'HOMER': 'Omar',
+            'GLENN HALL': 'narreh',
             'BIRDSALL': 'Edu',
-            'ADAM BILYJ': 'Jim Blackpool',
-            'ASHLEY JACKSON': 'Ash'
+            'ADAM BILYJ': 'J. Blackpool',
+            'ASHLEY JACKSON': 'Diggy Dawg'
         };
 
         async function runBalanceCheck(file) {
