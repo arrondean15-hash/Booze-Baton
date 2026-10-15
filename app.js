@@ -23,7 +23,7 @@
         // the disabled state if one ever ran. Guards must return BEFORE the try.
         const EA_FEATURES_ENABLED = true;
 
-        const APP_VERSION = 'v4.0.2';
+        const APP_VERSION = 'v4.0.3';
         const LAST_UPDATED = '15 Oct 2026';
 
         // Cloud Functions base URL
@@ -2635,7 +2635,7 @@
             } else if (currentBatonHolder && currentBatonHolder.holderTeamName) {
                 // History is wiped at each new game, but baton_current carries the holder over
                 if (batonCurrentTeam) batonCurrentTeam.textContent = currentBatonHolder.holderTeamName;
-                if (batonCurrentDate) batonCurrentDate.textContent = 'Carried over from last season';
+                if (batonCurrentDate) batonCurrentDate.textContent = 'Starting holder for the 2026/27 season';
             } else {
                 if (batonCurrentTeam) batonCurrentTeam.textContent = '-';
                 if (batonCurrentDate) batonCurrentDate.textContent = 'No baton history';

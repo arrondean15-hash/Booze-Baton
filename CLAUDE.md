@@ -176,6 +176,8 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 ## Recent Changes
 
 - **15 Oct 2026**:
+  - **v4.0.3**: baton reset — holder set to **Leeds United** (API-Football team 63, also added to known_teams),
+    history empty; empty-history label now "Starting holder for the 2026/27 season".
   - **v4.0.2**: front-page season label → "Season 2026/27"; Danny renamed D. Benigul → Danies (his EAFC 27
     pro name changed again) via `tools/season/rename-players.js` + bank maps. Backup: `backups/pre-rename-2026-10-15`.
 - **09 Oct 2026**:
