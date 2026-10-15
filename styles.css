@@ -619,6 +619,15 @@
             stroke: #1D3C8D;
         }
 
+        .screen-banter {
+            font-family: 'Sora', sans-serif;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: #FFCD00;
+            margin-bottom: 2px;
+        }
+
         .mot-title {
             font-family: 'Sora', sans-serif;
             font-size: 14px;
