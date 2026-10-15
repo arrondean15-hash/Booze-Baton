@@ -178,6 +178,11 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 - **15 Oct 2026**:
   - **v4.0.3**: baton reset — holder set to **Leeds United** (API-Football team 63, also added to known_teams),
     history empty; empty-history label now "Starting holder for the 2026/27 season".
+    Then (Arron's call) baton traced from Leeds at season start: Leeds lost 3-6 at Chelsea (EFL Cup, 9 Sep) →
+    Chelsea lost 0-3 to Brentford (18 Sep) → **Brentford hold** (drew 2-2 v Villa 10 Oct). 8 `baton` history entries
+    written from Wikipedia+ESPN results. Backup: `backups/pre-baton-2026-10-15`.
+    ⚠️ API-Football key is FREE plan: rejects `season=2026`, `last` and `next` → the app's **Update Baton
+    button cannot work** this season. Baton must be updated manually (or upgrade the plan).
   - **v4.0.2**: front-page season label → "Season 2026/27"; Danny renamed D. Benigul → Danies (his EAFC 27
     pro name changed again) via `tools/season/rename-players.js` + bank maps. Backup: `backups/pre-rename-2026-10-15`.
 - **09 Oct 2026**:
