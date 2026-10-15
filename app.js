@@ -23,7 +23,7 @@
         // the disabled state if one ever ran. Guards must return BEFORE the try.
         const EA_FEATURES_ENABLED = true;
 
-        const APP_VERSION = 'v4.0.4';
+        const APP_VERSION = 'v4.0.5';
         const LAST_UPDATED = '15 Oct 2026';
 
         // Cloud Functions base URL

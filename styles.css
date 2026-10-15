@@ -76,6 +76,16 @@
             margin-bottom: 40px;
         }
 
+        .login-photo {
+            display: block;
+            max-height: 34vh;
+            max-width: 80%;
+            border-radius: 16px;
+            border: 3px solid #FFCD00;
+            margin: -16px auto 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
         .google-sign-in-btn {
             display: flex;
             align-items: center;
