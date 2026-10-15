@@ -175,6 +175,9 @@ The app limits Firestore realtime listeners to prevent excessive reads:
 
 ## Recent Changes
 
+- **15 Oct 2026**:
+  - **v4.0.2**: front-page season label → "Season 2026/27"; Danny renamed D. Benigul → Danies (his EAFC 27
+    pro name changed again) via `tools/season/rename-players.js` + bank maps. Backup: `backups/pre-rename-2026-10-15`.
 - **09 Oct 2026**:
   - **v4.0.1: players renamed to EAFC 27 in-game pro names** (EA members/stats `proName`, club 525055):
     Narreh→narreh, Jim Blackpool→J. Blackpool, Le Dump→Baldacourt, Ash→Diggy Dawg, J3→Omar,

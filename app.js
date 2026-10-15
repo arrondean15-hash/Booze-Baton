@@ -23,8 +23,8 @@
         // the disabled state if one ever ran. Guards must return BEFORE the try.
         const EA_FEATURES_ENABLED = true;
 
-        const APP_VERSION = 'v4.0.1';
-        const LAST_UPDATED = '9 Oct 2026';
+        const APP_VERSION = 'v4.0.2';
+        const LAST_UPDATED = '15 Oct 2026';
 
         // Cloud Functions base URL
         const FUNCTIONS_URL = 'https://us-central1-booze-baton.cloudfunctions.net';
@@ -3690,7 +3690,7 @@
         // Bank statement name (upper-case substring) -> app playerName
         const BANK_TO_PLAYER = {
             'A DEAN': 'Baldacourt',
-            'DANNY ROWE': 'D. Benigul',
+            'DANNY ROWE': 'Danies',
             'CHARLIE SKELDING': 'Fredu',
             'HOMER': 'Omar',
             'GLENN HALL': 'narreh',

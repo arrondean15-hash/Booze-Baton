@@ -10,14 +10,10 @@ const admin = require(path.join(__dirname, '../../functions/node_modules/firebas
 admin.initializeApp({ projectId: 'booze-baton' });
 const db = admin.firestore();
 
-// 9 Oct 2026: app names → EAFC 27 in-game pro names (EA members/stats proName, club 525055)
+// Edit RENAMES for each rename run. History: 9 Oct 2026 all 8 → EAFC 27 pro names;
+// 15 Oct 2026 Danny's pro name changed again (EA members/stats proName, club 525055).
 const RENAMES = {
-  'Narreh': 'narreh',
-  'Jim Blackpool': 'J. Blackpool',
-  'Le Dump': 'Baldacourt',
-  'Ash': 'Diggy Dawg',
-  'J3': 'Omar',
-  'Erik Eriksson': 'D. Benigul',
+  'D. Benigul': 'Danies',
 };
 const apply = process.argv.includes('--apply');
 

@@ -36,7 +36,7 @@ OUT = os.path.expanduser("~/Downloads")
 # --- CONFIG: bank statement name (UPPER substring) -> app playerName (gamertag) ---
 BANK_TO_PLAYER = {
     "A DEAN":           "Baldacourt",
-    "DANNY ROWE":       "D. Benigul",
+    "DANNY ROWE":       "Danies",
     "CHARLIE SKELDING": "Fredu",
     "HOMER":            "Omar",
     "GLENN HALL":       "narreh",
@@ -46,7 +46,7 @@ BANK_TO_PLAYER = {
 }
 # app playerName -> nice display name (for the table + graphics)
 PLAYER_NAMES = {
-    "Baldacourt": "Arron Dean", "D. Benigul": "Danny Rowe", "Fredu": "Charlie Skelding",
+    "Baldacourt": "Arron Dean", "Danies": "Danny Rowe", "Fredu": "Charlie Skelding",
     "Omar": "Jack Homer", "narreh": "Glenn Hall", "Edu": "Matty Birdsall",
     "J. Blackpool": "Adam Bilyj", "Diggy Dawg": "Ashley Jackson",
 }
